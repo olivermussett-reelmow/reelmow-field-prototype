@@ -4,7 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const CONFIG_KEY="reelmow.connection.v1", DEMO_KEY="reelmow.demo.v1";
 const app=document.querySelector("#app");
 const demoCatalogue=[{model_id:"830038a1-6367-4beb-87f1-f692c98dc9ef",manufacturer_name:"Jacobsen",model_name:"LF3800",variant_id:"c7834745-3328-4d30-ae8a-bb35f7798848",variant_name:"LF3800 5-Gang",machine_type:"Cylinder Mower",rank:1}];
-const state={client:null,user:null,org:null,garage:null,machines:[],selected:null,specs:[],catalogueResults:[],loading:false,error:"",demo:localStorage.getItem(DEMO_KEY)==="true"};
+const state={client:null,user:null,org:null,garage:null,machines:[],selected:null,specs:[],serviceDue:[],serviceRecords:[],hoursLog:[],catalogueResults:[],loading:false,error:"",demo:localStorage.getItem(DEMO_KEY)==="true"};
 
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const val=s=>document.querySelector(s)?.value.trim()||"";
@@ -97,8 +97,8 @@ function renderGarage(){
 }
 function renderDetail(){
   const m=state.selected;
-  mount("<button class='back' data-action='back'>← Garage</button><section class='detail-head'><div class='machine-title'><div class='machine-title-icon'>⚙︎</div><div><div class='eyebrow'>"+esc(m.manufacturer?.name||"Manufacturer")+"</div><h1 style='font-size:38px;margin-bottom:5px'>"+esc(m.model?.model_name||"Machine")+"</h1><p class='muted'>"+esc(m.variant?.variant_name||"Variant")+"</p></div></div><div class='actions'><span class='badge "+(m.status==="service_due"?"service":"ready")+"'>"+esc((m.status||"ready").replaceAll("_"," "))+"</span></div></section><div class='detail-grid'><div><div class='card'><div class='section-head' style='margin:0 0 12px'><div><div class='eyebrow'>Machine health</div><h2>At a glance</h2></div><button class='btn secondary small' data-action='edit'>Edit</button></div><div class='metric-row'><div class='metric'><div class='num'>"+(m.current_engine_hours??"—")+"</div><div class='label'>Engine hours</div></div><div class='metric'><div class='num'>"+(m.current_reel_hours??"—")+"</div><div class='label'>Reel hours</div></div></div><div class='list'><div class='list-row'><div><div class='list-title'>Serial number</div><div class='list-meta'>"+esc(m.serial_number||"Not recorded")+"</div></div></div><div class='list-row'><div><div class='list-title'>Asset number</div><div class='list-meta'>"+esc(m.asset_number||"Not recorded")+"</div></div></div><div class='list-row'><div><div class='list-title'>Purchase date</div><div class='list-meta'>"+esc(m.purchase_date||"Not recorded")+"</div></div></div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Catalogue specifications</div><h2>Known machine data</h2><div id='specs'><div class='loading'><div class='spinner'></div>Loading verified specifications…</div></div></div></div><div><div class='card'><div class='eyebrow'>Service</div><h2>Keep it maintained.</h2><p class='tiny'>Service history belongs to the physical machine.</p><div class='note' style='margin-top:13px'>Verified maintenance rules will drive service reminders as they are published.</div><button class='btn secondary' style='width:100%;margin-top:12px' data-action='service'>View service history</button></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Documents</div><h2>Machine knowledge</h2><div class='list'><div class='list-row'><div><div class='list-title'>Operator manual</div><div class='list-meta'>Manufacturer source linked to catalogue</div></div><span>→</span></div><div class='list-row'><div><div class='list-title'>Parts</div><div class='list-meta'>Verified fitments will appear here</div></div><span>→</span></div></div></div></div></div>");
-  loadSpecs(m)
+  mount("<button class='back' data-action='back'>← Garage</button><section class='detail-head'><div class='machine-title'><div class='machine-title-icon'>⚙︎</div><div><div class='eyebrow'>"+esc(m.manufacturer?.name||"Manufacturer")+"</div><h1 style='font-size:38px;margin-bottom:5px'>"+esc(m.nickname||m.model?.model_name||"Machine")+"</h1><p class='muted'>"+esc(m.variant?.variant_name||"Variant")+"</p></div></div><div class='actions'><span class='badge "+(m.status==="service_due"?"service":"ready")+"'>"+esc((m.status||"ready").replaceAll("_"," "))+"</span></div></section><div class='detail-grid'><div><div class='card'><div class='section-head' style='margin:0 0 12px'><div><div class='eyebrow'>Machine health</div><h2>At a glance</h2></div><button class='btn secondary small' data-action='edit'>Edit</button></div><div class='metric-row'><div class='metric'><div class='num'>"+(m.current_engine_hours??"—")+"</div><div class='label'>Engine hours</div></div><div class='metric'><div class='num'>"+(m.current_reel_hours??"—")+"</div><div class='label'>Reel hours</div></div></div><div class='actions' style='margin-top:14px'><button class='btn small' data-action='hours'>Update hours</button><button class='btn secondary small' data-action='service'>Record service</button></div><div class='list'><div class='list-row'><div><div class='list-title'>Serial number</div><div class='list-meta'>"+esc(m.serial_number||"Not recorded")+"</div></div></div><div class='list-row'><div><div class='list-title'>Asset number</div><div class='list-meta'>"+esc(m.asset_number||"Not recorded")+"</div></div></div><div class='list-row'><div><div class='list-title'>Purchase date</div><div class='list-meta'>"+esc(m.purchase_date||"Not recorded")+"</div></div></div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Service status</div><h2>What needs doing?</h2><div id='service-due'><div class='loading'><div class='spinner'></div>Checking service schedule…</div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Catalogue specifications</div><h2>Known machine data</h2><div id='specs'><div class='loading'><div class='spinner'></div>Loading verified specifications…</div></div></div></div><div><div class='card'><div class='eyebrow'>Service history</div><h2>Recent work</h2><div id='service-history'><div class='loading'><div class='spinner'></div>Loading service history…</div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Documents</div><h2>Machine knowledge</h2><div class='list'><div class='list-row'><div><div class='list-title'>Operator manual</div><div class='list-meta'>Manufacturer source linked to catalogue</div></div><span>→</span></div><div class='list-row'><div><div class='list-title'>Parts</div><div class='list-meta'>Verified fitments will appear here</div></div><span>→</span></div></div></div></div></div>");
+  loadSpecs(m);loadServiceData(m)
 }
 function specsHtml(){
   return "<div class='spec-grid'>"+state.specs.map(s=>"<div class='spec'><div class='v'>"+esc(s.value_text??s.value_number??"—")+(s.unit?" "+esc(s.unit):"")+"</div><div class='k'>"+esc(s.label)+"</div></div>").join("")+"</div>"
@@ -107,6 +107,83 @@ async function loadSpecs(m){
   if(state.demo){state.specs=[{label:"Cutting width",value_number:2.54,unit:"m"},{label:"Number of reels",value_number:5,unit:"count"},{label:"Reel diameter",value_number:178,unit:"mm"},{label:"Reel width",value_number:559,unit:"mm"},{label:"Minimum height of cut",value_number:9.5,unit:"mm"},{label:"Maximum height of cut",value_number:29,unit:"mm"},{label:"Reel blades",value_text:"9 or 11"},{label:"Fuel",value_text:"Diesel"},{label:"Engine",value_text:"Kubota"}]}
   else{const {data,error}=await state.client.schema("catalogue").from("facts").select("value_text,value_number,unit,spec_definition_id").eq("machine_model_id",m.model.id).eq("status","active");if(error)return toast(error.message);const ids=(data||[]).map(x=>x.spec_definition_id);const {data:d,error:de}=ids.length?await state.client.schema("catalogue").from("spec_definitions").select("id,label").in("id",ids):{data:[]};if(de)return toast(de.message);const map=new Map((d||[]).map(x=>[x.id,x.label]));state.specs=(data||[]).map(x=>({...x,label:map.get(x.spec_definition_id)||"Specification"}))}
   const box=document.querySelector("#specs");if(box)box.innerHTML=state.specs.length?specsHtml():"<p class='tiny'>No verified specifications available.</p>"
+}
+function serviceDueHtml(){
+  if(!state.serviceDue.length)return "<div class='empty-mini'><div class='tiny'>No published service schedule for this machine yet.</div><div class='tiny' style='margin-top:5px'>REELMOW will only show maintenance rules that have been sourced and validated.</div></div>";
+  return "<div class='list'>"+state.serviceDue.map(x=>{
+    const due=x.service_status==="due";
+    const remaining=x.hours_remaining!=null?Math.round(Number(x.hours_remaining)*10)/10:null;
+    const date=x.calendar_due_date;
+    const detail=remaining!=null?(remaining<=0?"Due now":remaining+" engine hours remaining"):(date?("Due "+date):"Schedule published");
+    return "<div class='list-row'><div><div class='list-title'>"+esc(x.task_name)+"</div><div class='list-meta'>"+esc(detail)+(x.source_page?" · Manual p."+esc(x.source_page):"")+"</div></div><span class='badge "+(due?"service":"ready")+"'>"+(due?"DUE":"UPCOMING")+"</span></div>"
+  }).join("")+"</div>"
+}
+function serviceHistoryHtml(){
+  if(!state.serviceRecords.length)return "<div class='empty-mini'><div class='tiny'>No service records yet.</div><button class='btn secondary small' style='margin-top:10px' data-action='service'>Record the first service</button></div>";
+  return "<div class='list'>"+state.serviceRecords.map(x=>"<div class='list-row'><div><div class='list-title'>"+esc(x.task_name||"Service record")+"</div><div class='list-meta'>"+esc(new Date(x.serviced_at).toLocaleDateString())+" · "+(x.engine_hours!=null?esc(x.engine_hours)+" h":"hours not recorded")+(x.cost!=null?" · £"+Number(x.cost).toFixed(2):"")+"</div>"+(x.notes?"<div class='list-meta' style='margin-top:4px'>"+esc(x.notes)+"</div>":"")+"</div></div>").join("")+"</div>"
+}
+async function loadServiceData(m){
+  if(state.demo){
+    state.serviceDue=[
+      {task_name:"Engine oil change",service_status:"upcoming",hours_remaining:15.5,source_page:16},
+      {task_name:"Lubricate F1 grease points",service_status:"upcoming",hours_remaining:15.5,source_page:28},
+      {task_name:"Lubricate F2 grease points",service_status:"upcoming",hours_remaining:115.5,source_page:28},
+      {task_name:"Lubricate F3 grease points",service_status:"upcoming",hours_remaining:215.5,source_page:28},
+      {task_name:"Inspect fuel lines and clamps",service_status:"upcoming",hours_remaining:15.5,source_page:17}
+    ];
+    state.serviceRecords=[{task_name:"Engine oil change",serviced_at:"2026-08-14T10:00:00Z",engine_hours:1180,cost:94.5,notes:"Oil and filter replaced."}];
+  }else{
+    const [due,rec]=await Promise.all([
+      state.client.schema("garage").from("machine_service_due").select("*").eq("machine_id",m.id).order("service_status").order("task_name"),
+      state.client.schema("garage").from("machine_service_records").select("id,serviced_at,engine_hours,reel_hours,performed_by,cost,notes,service_task_id").eq("machine_id",m.id).order("serviced_at",{ascending:false}).limit(20)
+    ]);
+    if(due.error)return toast(due.error.message);
+    if(rec.error)return toast(rec.error.message);
+    const taskIds=[...(due.data||[]).map(x=>x.service_task_id),...(rec.data||[]).map(x=>x.service_task_id)].filter(Boolean);
+    let tasks=[];
+    if(taskIds.length){const t=await state.client.schema("catalogue").from("service_tasks").select("id,task_name").in("id",[...new Set(taskIds)]);if(t.error)return toast(t.error.message);tasks=t.data||[]}
+    const tm=new Map(tasks.map(x=>[x.id,x.task_name]));
+    state.serviceDue=due.data||[];
+    state.serviceRecords=(rec.data||[]).map(x=>({...x,task_name:tm.get(x.service_task_id)||"Service record"}));
+  }
+  const dueBox=document.querySelector("#service-due");if(dueBox)dueBox.innerHTML=serviceDueHtml();
+  const hist=document.querySelector("#service-history");if(hist)hist.innerHTML=serviceHistoryHtml();
+}
+function hoursModal(){
+  const m=state.selected;
+  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Machine hours</div><h2>Update the meter.</h2><p class='tiny'>Hours readings drive the service schedule.</p></div><button class='close' data-action='close'>×</button></div><form id='hours-form'><div class='grid two'><div class='field'><label>Engine hours</label><input class='input' id='new-engine-hours' type='number' min='"+esc(m.current_engine_hours??0)+"' step='.1' value='"+esc(m.current_engine_hours??"")+"'></div><div class='field'><label>Reel hours</label><input class='input' id='new-reel-hours' type='number' min='"+esc(m.current_reel_hours??0)+"' step='.1' value='"+esc(m.current_reel_hours??"")+"'></div></div><div class='field'><label>Notes</label><textarea class='input' id='hours-notes' rows='3' placeholder='Optional reading note'></textarea></div><button class='btn' style='width:100%'>Save hours</button></form></div></div>");
+  document.querySelector("#hours-form").addEventListener("submit",saveHours)
+}
+async function saveHours(e){
+  e.preventDefault();const m=state.selected;
+  const eh=num("#new-engine-hours"),rh=num("#new-reel-hours"),notes=val("#hours-notes");
+  if(state.demo){m.current_engine_hours=eh;m.current_reel_hours=rh;closeModal();toast("Hours updated");return renderDetail()}
+  try{
+    const {error}=await state.client.schema("garage").rpc("record_machine_hours",{target_machine:m.id,new_engine_hours:eh,new_reel_hours:rh,reading_source:"manual",reading_notes:notes||null});
+    if(error)throw error;
+    closeModal();await loadMachines();state.selected=state.machines.find(x=>x.id===m.id)||m;toast("Hours updated");render();
+  }catch(x){toast(x.message||"Could not save hours")}
+}
+function serviceModal(){
+  const m=state.selected;
+  const options=state.serviceDue.map(x=>"<option value='"+esc(x.service_task_id)+"'>"+esc(x.task_name)+"</option>").join("");
+  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Record service</div><h2>Log maintenance.</h2><p class='tiny'>Keep the work attached to this physical machine.</p></div><button class='close' data-action='close'>×</button></div><form id='service-form'><div class='field'><label>Service task</label><select class='input' id='service-task'>"+options+"<option value=''>Other / unscheduled service</option></select></div><div class='grid two'><div class='field'><label>Date</label><input class='input' id='service-date' type='date' value='"+new Date().toISOString().slice(0,10)+"' required></div><div class='field'><label>Cost</label><input class='input' id='service-cost' type='number' min='0' step='.01' placeholder='0.00'></div></div><div class='grid two'><div class='field'><label>Engine hours</label><input class='input' id='service-engine' type='number' min='0' step='.1' value='"+esc(m.current_engine_hours??"")+"'></div><div class='field'><label>Reel hours</label><input class='input' id='service-reel' type='number' min='0' step='.1' value='"+esc(m.current_reel_hours??"")+"'></div></div><div class='field'><label>Performed by</label><input class='input' id='performed-by' placeholder='Person or company'></div><div class='field'><label>Work completed / notes</label><textarea class='input' id='service-notes' rows='4' placeholder='Oil, filters, reels, belts, inspection notes…'></textarea></div><button class='btn' style='width:100%'>Save service record</button></form></div></div>");
+  document.querySelector("#service-form").addEventListener("submit",saveService)
+}
+async function saveService(e){
+  e.preventDefault();const m=state.selected;
+  const task=val("#service-task")||null,date=val("#service-date"),eh=num("#service-engine"),rh=num("#service-reel"),cost=num("#service-cost"),performed=val("#performed-by"),notes=val("#service-notes");
+  if(state.demo){
+    state.serviceRecords.unshift({task_name:state.serviceDue.find(x=>x.service_task_id===task)?.task_name||"Other / unscheduled service",serviced_at:date,engine_hours:eh,reel_hours:rh,cost,notes});
+    m.current_engine_hours=Math.max(Number(m.current_engine_hours||0),Number(eh||0));
+    m.current_reel_hours=Math.max(Number(m.current_reel_hours||0),Number(rh||0));
+    closeModal();toast("Service recorded");return renderDetail()
+  }
+  try{
+    const {error}=await state.client.schema("garage").rpc("record_machine_service",{target_machine:m.id,target_service_task:task,service_date:new Date(date+"T12:00:00").toISOString(),service_engine_hours:eh,service_reel_hours:rh,performed_by_name:performed||null,service_cost:cost,service_notes:notes||null,evidence_json:{}});
+    if(error)throw error;
+    closeModal();await loadMachines();state.selected=state.machines.find(x=>x.id===m.id)||m;toast("Service recorded");render();
+  }catch(x){toast(x.message||"Could not save service record")}
 }
 function addModal(){
   modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Add machine</div><h2>Find it in the catalogue.</h2><p class='tiny'>Search manufacturer, model or variant.</p></div><button class='close' data-action='close'>×</button></div><div class='search-wrap'><span class='search-icon'>⌕</span><input id='q' class='search' placeholder='Search manufacturer or model…'></div><div id='results' class='result-list'><p class='tiny'>Try <b>LF3800</b>.</p></div></div></div>");
@@ -154,8 +231,9 @@ document.addEventListener("click",e=>{
   if(x==="select"){const r=state.catalogueResults.find(v=>v.variant_id===a.dataset.id);if(r)machineModal(r);return}
   if(x==="open"){state.selected=state.machines.find(v=>v.id===a.dataset.id)||null;state.specs=[];return render()}
   if(x==="back"){state.selected=null;state.specs=[];return render()}
-  if(x==="edit")return toast("Machine editing is next.");
-  if(x==="service")return toast("Service history is the next Garage module.");
+  if(x==="edit")return toast("Machine editing is coming in the next Garage build.");
+  if(x==="hours")return hoursModal();
+  if(x==="service")return serviceModal();
   if(x==="signup")return signUp();
 });
 boot();
