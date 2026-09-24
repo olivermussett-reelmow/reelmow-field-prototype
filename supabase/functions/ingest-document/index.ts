@@ -97,6 +97,8 @@ function jsonHeaders(){ return {"content-type":"application/json"}; }
 Deno.serve(async req => {
   if(req.method!=="POST") return new Response(JSON.stringify({error:"POST required"}),{status:405,headers:jsonHeaders()});
   try{
+    const expected=Deno.env.get("REELMOW_INGESTION_TOKEN")||"";
+    if(!expected || req.headers.get("x-reelmow-ingestion-token")!==expected) throw new Error("Not authorised");
     const body=await req.json();
     const documentId=String(body.document_id||"");
     const pageText=String(body.page_text||"");
