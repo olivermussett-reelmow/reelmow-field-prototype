@@ -30,23 +30,23 @@ async function boot(){
   catch(e){state.error=e.message||"Unable to connect";render()}
 }
 async function loadWorkspace(){
-  const {data:m,error:me}=await state.client.from("garage.memberships").select("organization_id,role").eq("user_id",state.user.id);if(me)throw me;
+  const {data:m,error:me}=await state.client.schema("garage").from("memberships").select("organization_id,role").eq("user_id",state.user.id);if(me)throw me;
   if(!m?.length){state.org=null;state.garage=null;state.machines=[];return}
   const ids=m.map(x=>x.organization_id);
-  const {data:o,error:oe}=await state.client.from("garage.organizations").select("id,name,slug,created_at").in("id",ids).order("created_at",{ascending:true});if(oe)throw oe;
+  const {data:o,error:oe}=await state.client.schema("garage").from("organizations").select("id,name,slug,created_at").in("id",ids).order("created_at",{ascending:true});if(oe)throw oe;
   state.org=o?.[0]||null;if(!state.org)return;
-  const {data:g,error:ge}=await state.client.from("garage.garages").select("id,name,location_name").eq("organization_id",state.org.id).order("created_at");if(ge)throw ge;
+  const {data:g,error:ge}=await state.client.schema("garage").from("garages").select("id,name,location_name").eq("organization_id",state.org.id).order("created_at");if(ge)throw ge;
   state.garage=g?.[0]||null;if(state.garage)await loadMachines();
 }
 async function loadMachines(){
-  const {data,error}=await state.client.from("garage.machines").select("id,garage_id,machine_variant_id,serial_number,asset_number,nickname,purchase_date,current_engine_hours,current_reel_hours,status,created_at").eq("garage_id",state.garage.id).order("created_at",{ascending:false});if(error)throw error;
+  const {data,error}=await state.client.schema("garage").from("machines").select("id,garage_id,machine_variant_id,serial_number,asset_number,nickname,purchase_date,current_engine_hours,current_reel_hours,status,created_at").eq("garage_id",state.garage.id).order("created_at",{ascending:false});if(error)throw error;
   const rows=data||[];if(!rows.length){state.machines=[];return}
   const vids=rows.map(x=>x.machine_variant_id).filter(Boolean);
-  const {data:v,error:ve}=await state.client.from("catalogue.machine_variants").select("id,variant_name,machine_model_id").in("id",vids);if(ve)throw ve;
+  const {data:v,error:ve}=await state.client.schema("catalogue").from("machine_variants").select("id,variant_name,machine_model_id").in("id",vids);if(ve)throw ve;
   const mids=(v||[]).map(x=>x.machine_model_id);
-  const {data:mo,error:me}=mids.length?await state.client.from("catalogue.machine_models").select("id,model_name,model_code,manufacturer_id").in("id",mids):{data:[]};if(me)throw me;
+  const {data:mo,error:me}=mids.length?await state.client.schema("catalogue").from("machine_models").select("id,model_name,model_code,manufacturer_id").in("id",mids):{data:[]};if(me)throw me;
   const fids=(mo||[]).map(x=>x.manufacturer_id);
-  const {data:f,error:fe}=fids.length?await state.client.from("catalogue.manufacturers").select("id,name").in("id",fids):{data:[]};if(fe)throw fe;
+  const {data:f,error:fe}=fids.length?await state.client.schema("catalogue").from("manufacturers").select("id,name").in("id",fids):{data:[]};if(fe)throw fe;
   const vm=new Map((v||[]).map(x=>[x.id,x])),mm=new Map((mo||[]).map(x=>[x.id,x])),fm=new Map((f||[]).map(x=>[x.id,x]));
   state.machines=rows.map(x=>{const vv=vm.get(x.machine_variant_id),model=vv&&mm.get(vv.machine_model_id),man=model&&fm.get(model.manufacturer_id);return {...x,variant:vv,model,manufacturer:man}});
 }
@@ -55,7 +55,7 @@ async function search(q){
   state.loading=true;box.innerHTML="<div class='loading'><div class='spinner'></div>Searching catalogue…</div>";
   try{
     if(state.demo)state.catalogueResults=demoCatalogue.filter(x=>[x.manufacturer_name,x.model_name,x.variant_name].some(v=>v.toLowerCase().includes(q.toLowerCase())));
-    else{const {data,error}=await state.client.rpc("search_machines",{search_text:q.trim(),result_limit:12});if(error)throw error;state.catalogueResults=data||[]}
+    else{const {data,error}=await state.client.schema("catalogue").rpc("search_machines",{search_text:q.trim(),result_limit:12});if(error)throw error;state.catalogueResults=data||[]}
     box.innerHTML=state.catalogueResults.length?state.catalogueResults.map(r=>"<button class='result' data-action='select' data-id='"+esc(r.variant_id)+"'><div><div class='result-name'>"+esc(r.manufacturer_name)+" "+esc(r.model_name)+"</div><div class='result-meta'>"+esc(r.variant_name||"Model")+" · "+esc(r.machine_type||"Machine")+"</div></div><span class='arrow'>›</span></button>").join(""):"<p class='tiny'>No catalogue matches.</p>";
   }catch(e){box.innerHTML="<div class='error'>"+esc(e.message||"Search failed")+"</div>"}finally{state.loading=false}
 }
@@ -105,7 +105,7 @@ function specsHtml(){
 }
 async function loadSpecs(m){
   if(state.demo){state.specs=[{label:"Cutting width",value_number:2.54,unit:"m"},{label:"Number of reels",value_number:5,unit:"count"},{label:"Reel diameter",value_number:178,unit:"mm"},{label:"Reel width",value_number:559,unit:"mm"},{label:"Minimum height of cut",value_number:9.5,unit:"mm"},{label:"Maximum height of cut",value_number:29,unit:"mm"},{label:"Reel blades",value_text:"9 or 11"},{label:"Fuel",value_text:"Diesel"},{label:"Engine",value_text:"Kubota"}]}
-  else{const {data,error}=await state.client.from("catalogue.facts").select("value_text,value_number,unit,spec_definition_id").eq("machine_model_id",m.model.id).eq("status","active");if(error)return toast(error.message);const ids=(data||[]).map(x=>x.spec_definition_id);const {data:d,error:de}=ids.length?await state.client.from("catalogue.spec_definitions").select("id,label").in("id",ids):{data:[]};if(de)return toast(de.message);const map=new Map((d||[]).map(x=>[x.id,x.label]));state.specs=(data||[]).map(x=>({...x,label:map.get(x.spec_definition_id)||"Specification"}))}
+  else{const {data,error}=await state.client.schema("catalogue").from("facts").select("value_text,value_number,unit,spec_definition_id").eq("machine_model_id",m.model.id).eq("status","active");if(error)return toast(error.message);const ids=(data||[]).map(x=>x.spec_definition_id);const {data:d,error:de}=ids.length?await state.client.schema("catalogue").from("spec_definitions").select("id,label").in("id",ids):{data:[]};if(de)return toast(de.message);const map=new Map((d||[]).map(x=>[x.id,x.label]));state.specs=(data||[]).map(x=>({...x,label:map.get(x.spec_definition_id)||"Specification"}))}
   const box=document.querySelector("#specs");if(box)box.innerHTML=state.specs.length?specsHtml():"<p class='tiny'>No verified specifications available.</p>"
 }
 function addModal(){
@@ -120,13 +120,13 @@ async function saveMachine(e,r){
   e.preventDefault();
   const p={garage_id:state.garage.id,machine_variant_id:r.variant_id,serial_number:val("#serial"),asset_number:val("#asset"),nickname:val("#nickname"),purchase_date:val("#date")||null,current_engine_hours:num("#hours"),current_reel_hours:num("#reel"),created_by:state.user?.id||null};
   if(state.demo){state.machines.unshift({...p,id:crypto.randomUUID(),status:"ready",variant:{variant_name:r.variant_name},model:{model_name:r.model_name},manufacturer:{name:r.manufacturer_name}});closeModal();toast("Machine added to Garage");return render()}
-  try{const {error}=await state.client.from("garage.machines").insert(p);if(error)throw error;closeModal();await loadMachines();toast("Machine added to Garage");render()}catch(x){toast(x.message||"Could not add machine")}
+  try{const {error}=await state.client.schema("garage").from("machines").insert(p);if(error)throw error;closeModal();await loadMachines();toast("Machine added to Garage");render()}catch(x){toast(x.message||"Could not add machine")}
 }
 async function createOrg(e){
-  e.preventDefault();try{const {data,error}=await state.client.rpc("create_organization",{org_name:val("#org-name"),org_slug:slug(val("#org-name"))+"-"+Math.random().toString(36).slice(2,7)});if(error)throw error;const {error:g}=await state.client.from("garage.garages").insert({organization_id:data,name:val("#garage-name"),location_name:val("#garage-location")});if(g)throw g;await loadWorkspace();render()}catch(x){state.error=x.message;render()}
+  e.preventDefault();try{const {data,error}=await state.client.schema("garage").rpc("create_organization",{org_name:val("#org-name"),org_slug:slug(val("#org-name"))+"-"+Math.random().toString(36).slice(2,7)});if(error)throw error;const {error:g}=await state.client.schema("garage").from("garages").insert({organization_id:data,name:val("#garage-name"),location_name:val("#garage-location")});if(g)throw g;await loadWorkspace();render()}catch(x){state.error=x.message;render()}
 }
 async function createGarage(e){
-  e.preventDefault();try{const {error}=await state.client.from("garage.garages").insert({organization_id:state.org.id,name:val("#garage-name"),location_name:val("#garage-location")});if(error)throw error;await loadWorkspace();render()}catch(x){toast(x.message)}
+  e.preventDefault();try{const {error}=await state.client.schema("garage").from("garages").insert({organization_id:state.org.id,name:val("#garage-name"),location_name:val("#garage-location")});if(error)throw error;await loadWorkspace();render()}catch(x){toast(x.message)}
 }
 async function signIn(e){
   e.preventDefault();try{const {error}=await state.client.auth.signInWithPassword({email:val("#email"),password:document.querySelector("#password").value});if(error)throw error;await boot()}catch(x){state.error=x.message;render()}
