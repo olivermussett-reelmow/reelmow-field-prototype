@@ -15,7 +15,7 @@ const extractionSchema = {
       type: "object",
       additionalProperties: false,
       properties: {
-        manufacturer: { type: ["string","null"] },
+        manufacturer: {type:"anyOf",items:[{type:"string"},{type:"null"}]},
         family: { type: ["string","null"] },
         model: { type: ["string","null"] },
         variant: { type: ["string","null"] },
@@ -49,7 +49,7 @@ const extractionSchema = {
           task_name: { type: "string" },
           instructions: { type: "string" },
           safety_notes: { type: ["string","null"] },
-          interval_engine_hours: { type: ["number","null"] },
+          interval_engine_hours: {type:"anyOf",items:[{type:"number"},{type:"null"}]},
           interval_reel_hours: { type: ["number","null"] },
           interval_calendar_days: { type: ["number","null"] },
           confidence: { type: "number" },
@@ -103,10 +103,10 @@ Deno.serve(async req => {
     const jobId=String(body.job_id||"");
     if(!documentId||!pageText||!jobId) return new Response(JSON.stringify({error:"document_id, job_id and page_text are required"}),{status:400,headers:jsonHeaders()});
 
-    const {data:doc,error:de}=await supabase.from("catalogue.documents").select("id,title,document_type,machine_model_id,machine_variant_id").eq("id",documentId).single();
+    const {data:doc,error:de}=await supabase.schema("catalogue").from("documents").select("id,title,document_type,machine_model_id,machine_variant_id").eq("id",documentId).single();
     if(de) throw de;
 
-    const {data:run,error:re}=await supabase.from("ingestion.ai_runs").insert({
+    const {data:run,error:re}=await supabase.schema("ingestion").from("ai_runs").insert({
       job_id:jobId,document_id:documentId,provider:"openai",model:"gpt-5.5",task:"catalogue_document_extraction",status:"running"
     }).select("id").single();
     if(re) throw re;
@@ -122,7 +122,7 @@ Deno.serve(async req => {
 
     const parsed=JSON.parse(response.output_text);
     const usage=response.usage||{};
-    await supabase.from("ingestion.ai_runs").update({
+    await supabase.schema("ingestion").from("ai_runs").update({
       status:"completed",output_json:parsed,usage_json:usage,completed_at:new Date().toISOString()
     }).eq("id",run.id);
 
@@ -143,7 +143,7 @@ Deno.serve(async req => {
       confidence_score:x.confidence,extraction_method:"openai_structured_output",status:"pending"
     });
     if(extracted.length){
-      const {error:xe}=await supabase.from("ingestion.extracted_facts").insert(extracted);
+      const {error:xe}=await supabase.schema("ingestion").from("extracted_facts").insert(extracted);
       if(xe) throw xe;
     }
 
