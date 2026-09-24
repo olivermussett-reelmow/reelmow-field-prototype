@@ -410,8 +410,8 @@ create table if not exists garage.machine_photos (
 create index if not exists memberships_user_idx on garage.memberships(user_id);
 create index if not exists machines_garage_idx on garage.machines(garage_id);
 create index if not exists machines_variant_idx on garage.machines(machine_variant_id);
-create index if not exists machine_hours_machine_idx on garage.machine_hours_log(machine_id);
-create index if not exists service_records_machine_idx on garage.machine_service_records(machine_id);
+create index if not exists machine_hours_machine_idx on garage.machine_hours_log(machine_id, recorded_at desc);
+create index if not exists service_records_machine_idx on garage.machine_service_records(machine_id, serviced_at desc, created_at desc);
 create index if not exists service_records_task_idx on garage.machine_service_records(service_task_id);
 create index if not exists machine_documents_machine_idx on garage.machine_documents(machine_id);
 create index if not exists machine_photos_machine_idx on garage.machine_photos(machine_id);
