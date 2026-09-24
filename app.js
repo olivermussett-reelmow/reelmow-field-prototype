@@ -49,7 +49,7 @@ async function loadWorkspace(){
   state.garage=g?.[0]||null;if(state.garage)await loadMachines();
 }
 async function loadMachines(){
-  const {data,error}=await state.client.schema("garage").from("machines").select("id,garage_id,machine_variant_id,serial_number,asset_number,nickname,purchase_date,current_engine_hours,current_reel_hours,status,created_at").eq("garage_id",state.garage.id).order("created_at",{ascending:false});if(error)throw error;
+  const {data,error}=await state.client.schema("garage").from("machines").select("id,garage_id,machine_variant_id,serial_number,asset_number,nickname,purchase_date,current_engine_hours,current_reel_hours,status,notes,created_at").eq("garage_id",state.garage.id).order("created_at",{ascending:false});if(error)throw error;
   const rows=data||[];if(!rows.length){state.machines=[];return}
   const vids=rows.map(x=>x.machine_variant_id).filter(Boolean);
   const {data:v,error:ve}=await state.client.schema("catalogue").from("machine_variants").select("id,variant_name,machine_model_id").in("id",vids);if(ve)throw ve;
@@ -263,6 +263,20 @@ function addModal(){
   modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Add machine</div><h2>Find it in the catalogue.</h2><p class='tiny'>Search manufacturer, model or variant.</p></div><button class='close' data-action='close'>×</button></div><div class='search-wrap'><span class='search-icon'>⌕</span><input id='q' class='search' placeholder='Search manufacturer or model…'></div><div id='results' class='result-list'><p class='tiny'>Try <b>LF3800</b>.</p></div></div></div>");
   const q=document.querySelector("#q");let t;q.addEventListener("input",()=>{clearTimeout(t);t=setTimeout(()=>search(q.value),220)});q.focus()
 }
+function editModal(){
+  const m=state.selected;
+  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Machine details</div><h2>Edit machine.</h2><p class='tiny'>Update the physical asset record. Catalogue identity remains fixed.</p></div><button class='close' data-action='close'>×</button></div><form id='edit-machine'><div class='field'><label>Nickname</label><input class='input' id='edit-nickname' value='\${esc(m.nickname||"")}' maxlength='80'></div><div class='field'><label>Asset number</label><input class='input' id='edit-asset' value='\${esc(m.asset_number||"")}' maxlength='80'></div><div class='field'><label>Purchase date</label><input class='input' id='edit-date' type='date' value='\${esc(m.purchase_date||"")}'></div><div class='field'><label>Status</label><select class='input' id='edit-status'><option value='ready'>Ready</option><option value='service_due'>Service due</option><option value='in_service'>In service</option><option value='out_of_service'>Out of service</option><option value='retired'>Retired</option></select></div><div class='field'><label>Notes</label><textarea class='input' id='edit-notes' rows='4' maxlength='2000'>\${esc(m.notes||"")}</textarea></div><button class='btn' style='width:100%'>Save changes</button></form></div></div>");
+  document.querySelector("#edit-status").value=m.status||"ready";
+  document.querySelector("#edit-machine").addEventListener("submit",async e=>{
+    e.preventDefault();
+    if(state.demo){Object.assign(m,{nickname:val("#edit-nickname"),asset_number:val("#edit-asset"),purchase_date:val("#edit-date")||null,status:val("#edit-status"),notes:val("#edit-notes")});closeModal();toast("Machine updated");return render()}
+    try{
+      const {error}=await state.client.schema("garage").from("machines").update({nickname:val("#edit-nickname"),asset_number:val("#edit-asset"),purchase_date:val("#edit-date")||null,status:val("#edit-status"),notes:val("#edit-notes"),updated_at:new Date().toISOString()}).eq("id",m.id);
+      if(error)throw error;
+      closeModal();await loadMachines();state.selected=state.machines.find(x=>x.id===m.id)||m;toast("Machine updated");render();
+    }catch(x){toast(x.message||"Could not update machine")}
+  });
+}
 function machineModal(r){
   modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Physical machine</div><h2>"+esc(r.manufacturer_name)+" "+esc(r.model_name)+"</h2><p class='tiny'>"+esc(r.variant_name||"Variant")+" · REELMOW catalogue</p></div><button class='close' data-action='close'>×</button></div><form id='machine-form'><div class='note' style='margin-bottom:14px'><b>Scan the machine plate</b><br>Take a clear photo and REELMOW will read the visible model and serial text. You still confirm the result before adding the machine.</div><div class='field'><label>Plate photo</label><input class='input' id='plate-photo' type='file' accept='image/*' capture='environment'></div><div id='plate-result'></div><div class='field'><label>Serial number</label><input class='input' id='serial'></div><div class='field'><label>Asset number</label><input class='input' id='asset'></div><div class='field'><label>Nickname</label><input class='input' id='nickname' placeholder='e.g. Main Outfield Mower'></div><div class='grid two'><div class='field'><label>Purchase date</label><input class='input' id='date' type='date'></div><div class='field'><label>Engine hours</label><input class='input' id='hours' type='number' min='0' step='.1'></div></div><div class='field'><label>Reel hours</label><input class='input' id='reel' type='number' min='0' step='.1'></div><div class='note'>This physical asset will be linked to the verified catalogue variant.</div><button class='btn' style='width:100%;margin-top:14px'>Add to Garage</button></form></div></div>");
   document.querySelector("#machine-form").addEventListener("submit",e=>saveMachine(e,r));
@@ -337,7 +351,7 @@ document.addEventListener("click",e=>{
   if(x==="select"){const r=state.catalogueResults.find(v=>v.variant_id===a.dataset.id);if(r)machineModal(r);return}
   if(x==="open"){state.selected=state.machines.find(v=>v.id===a.dataset.id)||null;state.specs=[];return render()}
   if(x==="back"){state.selected=null;state.specs=[];return render()}
-  if(x==="edit")return toast("Machine editing is coming in the next Garage build.");
+  if(x==="edit")return editModal();
   if(x==="hours")return hoursModal();
   if(x==="document-upload")return evidenceUploadModal("document");
   if(x==="photo-upload")return evidenceUploadModal("photo");
