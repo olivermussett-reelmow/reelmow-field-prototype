@@ -254,8 +254,25 @@ function addModal(){
   const q=document.querySelector("#q");let t;q.addEventListener("input",()=>{clearTimeout(t);t=setTimeout(()=>search(q.value),220)});q.focus()
 }
 function machineModal(r){
-  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Physical machine</div><h2>"+esc(r.manufacturer_name)+" "+esc(r.model_name)+"</h2><p class='tiny'>"+esc(r.variant_name||"Variant")+" · REELMOW catalogue</p></div><button class='close' data-action='close'>×</button></div><form id='machine-form'><div class='field'><label>Serial number</label><input class='input' id='serial'></div><div class='field'><label>Asset number</label><input class='input' id='asset'></div><div class='field'><label>Nickname</label><input class='input' id='nickname' placeholder='e.g. Main Outfield Mower'></div><div class='grid two'><div class='field'><label>Purchase date</label><input class='input' id='date' type='date'></div><div class='field'><label>Engine hours</label><input class='input' id='hours' type='number' min='0' step='.1'></div></div><div class='field'><label>Reel hours</label><input class='input' id='reel' type='number' min='0' step='.1'></div><div class='note'>This physical asset will be linked to the verified catalogue variant.</div><button class='btn' style='width:100%;margin-top:14px'>Add to Garage</button></form></div></div>");
-  document.querySelector("#machine-form").addEventListener("submit",e=>saveMachine(e,r))
+  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Physical machine</div><h2>"+esc(r.manufacturer_name)+" "+esc(r.model_name)+"</h2><p class='tiny'>"+esc(r.variant_name||"Variant")+" · REELMOW catalogue</p></div><button class='close' data-action='close'>×</button></div><form id='machine-form'><div class='note' style='margin-bottom:14px'><b>Scan the machine plate</b><br>Take a clear photo and REELMOW will read the visible model and serial text. You still confirm the result before adding the machine.</div><div class='field'><label>Plate photo</label><input class='input' id='plate-photo' type='file' accept='image/*' capture='environment'></div><div id='plate-result'></div><div class='field'><label>Serial number</label><input class='input' id='serial'></div><div class='field'><label>Asset number</label><input class='input' id='asset'></div><div class='field'><label>Nickname</label><input class='input' id='nickname' placeholder='e.g. Main Outfield Mower'></div><div class='grid two'><div class='field'><label>Purchase date</label><input class='input' id='date' type='date'></div><div class='field'><label>Engine hours</label><input class='input' id='hours' type='number' min='0' step='.1'></div></div><div class='field'><label>Reel hours</label><input class='input' id='reel' type='number' min='0' step='.1'></div><div class='note'>This physical asset will be linked to the verified catalogue variant.</div><button class='btn' style='width:100%;margin-top:14px'>Add to Garage</button></form></div></div>");
+  document.querySelector("#machine-form").addEventListener("submit",e=>saveMachine(e,r));
+  document.querySelector("#plate-photo").addEventListener("change",e=>identifyPlate(e.target.files?.[0]))
+}
+async function identifyPlate(file){
+  if(!file)return;
+  const box=document.querySelector("#plate-result");if(box)box.innerHTML="<div class='note'>Reading plate…</div>";
+  if(state.demo){if(box)box.innerHTML="<div class='note'>Demo mode: plate scan preview. In the live build this will use AI/OCR.</div>";return}
+  try{
+    const reader=new FileReader();
+    const data=await new Promise((resolve,reject)=>{reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file)});
+    const {data:result,error}=await state.client.functions.invoke("identify-machine",{body:{image_data_url:data}});
+    if(error)throw error;
+    if(result?.error)throw new Error(result.error);
+    const set=(id,v)=>{if(v&&document.querySelector(id))document.querySelector(id).value=v};
+    set("#serial",result.serial_number);
+    const confidence=Math.round(Number(result.confidence||0)*100);
+    if(box)box.innerHTML="<div class='note'><b>AI read:</b> "+esc([result.manufacturer,result.model,result.variant].filter(Boolean).join(" · ")||"No model identified")+"<br>Confidence "+confidence+"%"+(result.uncertainty?" · "+esc(result.uncertainty):"")+"</div>";
+  }catch(x){if(box)box.innerHTML="<div class='error'>"+esc(x.message||"Plate scan failed")+"</div>"}
 }
 async function saveMachine(e,r){
   e.preventDefault();
