@@ -125,7 +125,7 @@ function serviceHistoryHtml(){
 async function loadServiceData(m){
   if(state.demo){
     state.serviceDue=[
-      {task_name:"Engine oil change",service_status:"upcoming",hours_remaining:15.5,source_page:16},
+      {task_name:"Engine oil change",service_status:"due",hours_remaining:-4.5,source_page:16},
       {task_name:"Lubricate F1 grease points",service_status:"upcoming",hours_remaining:15.5,source_page:28},
       {task_name:"Lubricate F2 grease points",service_status:"upcoming",hours_remaining:115.5,source_page:28},
       {task_name:"Lubricate F3 grease points",service_status:"upcoming",hours_remaining:215.5,source_page:28},
