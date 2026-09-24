@@ -97,8 +97,8 @@ function renderGarage(){
 }
 function renderDetail(){
   const m=state.selected;
-  mount("<button class='back' data-action='back'>← Garage</button><section class='detail-head'><div class='machine-title'><div class='machine-title-icon'>⚙︎</div><div><div class='eyebrow'>"+esc(m.manufacturer?.name||"Manufacturer")+"</div><h1 style='font-size:38px;margin-bottom:5px'>"+esc(m.nickname||m.model?.model_name||"Machine")+"</h1><p class='muted'>"+esc(m.variant?.variant_name||"Variant")+"</p></div></div><div class='actions'><span class='badge "+(m.status==="service_due"?"service":"ready")+"'>"+esc((m.status||"ready").replaceAll("_"," "))+"</span></div></section><div class='detail-grid'><div><div class='card'><div class='section-head' style='margin:0 0 12px'><div><div class='eyebrow'>Machine health</div><h2>At a glance</h2></div><button class='btn secondary small' data-action='edit'>Edit</button></div><div class='metric-row'><div class='metric'><div class='num'>"+(m.current_engine_hours??"—")+"</div><div class='label'>Engine hours</div></div><div class='metric'><div class='num'>"+(m.current_reel_hours??"—")+"</div><div class='label'>Reel hours</div></div></div><div class='actions' style='margin-top:14px'><button class='btn small' data-action='hours'>Update hours</button><button class='btn secondary small' data-action='service'>Record service</button></div><div class='list'><div class='list-row'><div><div class='list-title'>Serial number</div><div class='list-meta'>"+esc(m.serial_number||"Not recorded")+"</div></div></div><div class='list-row'><div><div class='list-title'>Asset number</div><div class='list-meta'>"+esc(m.asset_number||"Not recorded")+"</div></div></div><div class='list-row'><div><div class='list-title'>Purchase date</div><div class='list-meta'>"+esc(m.purchase_date||"Not recorded")+"</div></div></div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Service status</div><h2>What needs doing?</h2><div id='service-due'><div class='loading'><div class='spinner'></div>Checking service schedule…</div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Catalogue specifications</div><h2>Known machine data</h2><div id='specs'><div class='loading'><div class='spinner'></div>Loading verified specifications…</div></div></div></div><div><div class='card'><div class='eyebrow'>Service history</div><h2>Recent work</h2><div id='service-history'><div class='loading'><div class='spinner'></div>Loading service history…</div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Documents</div><h2>Machine knowledge</h2><div class='list'><div class='list-row'><div><div class='list-title'>Operator manual</div><div class='list-meta'>Manufacturer source linked to catalogue</div></div><span>→</span></div><div class='list-row'><div><div class='list-title'>Parts</div><div class='list-meta'>Verified fitments will appear here</div></div><span>→</span></div></div></div></div></div>");
-  loadSpecs(m);loadServiceData(m)
+  mount("<button class='back' data-action='back'>← Garage</button><section class='detail-head'><div class='machine-title'><div class='machine-title-icon'>⚙︎</div><div><div class='eyebrow'>"+esc(m.manufacturer?.name||"Manufacturer")+"</div><h1 style='font-size:38px;margin-bottom:5px'>"+esc(m.nickname||m.model?.model_name||"Machine")+"</h1><p class='muted'>"+esc(m.variant?.variant_name||"Variant")+"</p></div></div><div class='actions'><span class='badge "+(m.status==="service_due"?"service":"ready")+"'>"+esc((m.status||"ready").replaceAll("_"," "))+"</span></div></section><div class='detail-grid'><div><div class='card'><div class='section-head' style='margin:0 0 12px'><div><div class='eyebrow'>Machine health</div><h2>At a glance</h2></div><button class='btn secondary small' data-action='edit'>Edit</button></div><div class='metric-row'><div class='metric'><div class='num'>"+(m.current_engine_hours??"—")+"</div><div class='label'>Engine hours</div></div><div class='metric'><div class='num'>"+(m.current_reel_hours??"—")+"</div><div class='label'>Reel hours</div></div></div><div class='actions' style='margin-top:14px'><button class='btn small' data-action='hours'>Update hours</button><button class='btn secondary small' data-action='service'>Record service</button></div><div class='list'><div class='list-row'><div><div class='list-title'>Serial number</div><div class='list-meta'>"+esc(m.serial_number||"Not recorded")+"</div></div></div><div class='list-row'><div><div class='list-title'>Asset number</div><div class='list-meta'>"+esc(m.asset_number||"Not recorded")+"</div></div></div><div class='list-row'><div><div class='list-title'>Purchase date</div><div class='list-meta'>"+esc(m.purchase_date||"Not recorded")+"</div></div></div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Service status</div><h2>What needs doing?</h2><div id='service-due'><div class='loading'><div class='spinner'></div>Checking service schedule…</div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Catalogue specifications</div><h2>Known machine data</h2><div id='specs'><div class='loading'><div class='spinner'></div>Loading verified specifications…</div></div></div></div><div><div class='card'><div class='eyebrow'>Service history</div><h2>Recent work</h2><div id='service-history'><div class='loading'><div class='spinner'></div>Loading service history…</div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Documents</div><h2>Machine knowledge</h2><div class='actions' style='margin:10px 0'><button class='btn secondary small' data-action='document-upload'>Add document</button></div><div id='machine-documents'><div class='loading'><div class='spinner'></div>Loading documents…</div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Photos</div><h2>Machine evidence</h2><div class='actions' style='margin:10px 0'><button class='btn secondary small' data-action='photo-upload'>Take / add photo</button></div><div id='machine-photos'><div class='loading'><div class='spinner'></div>Loading photos…</div></div></div></div></div>");
+  loadSpecs(m);loadServiceData(m);loadEvidence(m)
 }
 function specsHtml(){
   return "<div class='spec-grid'>"+state.specs.map(s=>"<div class='spec'><div class='v'>"+esc(s.value_text??s.value_number??"—")+(s.unit?" "+esc(s.unit):"")+"</div><div class='k'>"+esc(s.label)+"</div></div>").join("")+"</div>"
@@ -107,6 +107,70 @@ async function loadSpecs(m){
   if(state.demo){state.specs=[{label:"Cutting width",value_number:2.54,unit:"m"},{label:"Number of reels",value_number:5,unit:"count"},{label:"Reel diameter",value_number:178,unit:"mm"},{label:"Reel width",value_number:559,unit:"mm"},{label:"Minimum height of cut",value_number:9.5,unit:"mm"},{label:"Maximum height of cut",value_number:29,unit:"mm"},{label:"Reel blades",value_text:"9 or 11"},{label:"Fuel",value_text:"Diesel"},{label:"Engine",value_text:"Kubota"}]}
   else{const {data,error}=await state.client.schema("catalogue").from("facts").select("value_text,value_number,unit,spec_definition_id").eq("machine_model_id",m.model.id).eq("status","active");if(error)return toast(error.message);const ids=(data||[]).map(x=>x.spec_definition_id);const {data:d,error:de}=ids.length?await state.client.schema("catalogue").from("spec_definitions").select("id,label").in("id",ids):{data:[]};if(de)return toast(de.message);const map=new Map((d||[]).map(x=>[x.id,x.label]));state.specs=(data||[]).map(x=>({...x,label:map.get(x.spec_definition_id)||"Specification"}))}
   const box=document.querySelector("#specs");if(box)box.innerHTML=state.specs.length?specsHtml():"<p class='tiny'>No verified specifications available.</p>"
+}
+function documentsHtml(){
+  if(!state.machineDocuments?.length)return "<div class='empty-mini'><div class='tiny'>No documents attached to this machine yet.</div></div>";
+  return "<div class='list'>"+state.machineDocuments.map(x=>"<div class='list-row'><div><div class='list-title'>"+esc(x.title)+"</div><div class='list-meta'>"+esc(x.document_type)+" · "+esc(x.source||"upload")+"</div></div><button class='btn ghost small' data-action='open-document' data-id='"+esc(x.id)+"'>Open</button></div>").join("")+"</div>"
+}
+function photosHtml(){
+  if(!state.machinePhotos?.length)return "<div class='empty-mini'><div class='tiny'>Add a photo of the machine, model plate or service evidence.</div></div>";
+  return "<div class='photo-grid'>"+state.machinePhotos.map(x=>"<div class='photo-card'><img src='"+esc(x.url)+"' alt='"+esc(x.caption||"Machine photo")+"' loading='lazy'><div class='tiny'>"+esc(x.caption||"Machine photo")+"</div></div>").join("")+"</div>"
+}
+async function loadEvidence(m){
+  state.machineDocuments=[];state.machinePhotos=[];
+  if(state.demo){
+    state.machineDocuments=[{id:"demo-manual",title:"Jacobsen LF3800 Operator Manual",document_type:"operator_manual",source:"manufacturer"}];
+    state.machinePhotos=[];
+  }else{
+    const [d,p]=await Promise.all([
+      state.client.schema("garage").from("machine_documents").select("id,title,document_type,storage_bucket,storage_path,source,created_at").eq("machine_id",m.id).order("created_at",{ascending:false}),
+      state.client.schema("garage").from("machine_photos").select("id,storage_bucket,storage_path,caption,photo_type,captured_at,created_at").eq("machine_id",m.id).order("created_at",{ascending:false})
+    ]);
+    if(d.error)return toast(d.error.message);if(p.error)return toast(p.error.message);
+    state.machineDocuments=d.data||[];
+    state.machinePhotos=[];
+    for(const x of p.data||[]){
+      const u=await state.client.storage.from(x.storage_bucket).createSignedUrl(x.storage_path,3600);
+      if(!u.error)state.machinePhotos.push({...x,url:u.data.signedUrl});
+    }
+  }
+  const db=document.querySelector("#machine-documents");if(db)db.innerHTML=documentsHtml();
+  const pb=document.querySelector("#machine-photos");if(pb)pb.innerHTML=photosHtml();
+}
+function evidenceUploadModal(kind){
+  const m=state.selected;
+  const isPhoto=kind==="photo";
+  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>"+(isPhoto?"Machine photo":"Machine document")+"</div><h2>"+(isPhoto?"Capture evidence.":"Attach a document.")+"</h2><p class='tiny'>Files are stored privately against this physical machine.</p></div><button class='close' data-action='close'>×</button></div><form id='evidence-form'><div class='field'><label>File</label><input class='input' id='evidence-file' type='file' "+(isPhoto?"accept='image/*' capture='environment'":"accept='.pdf,.jpg,.jpeg,.png,.webp,.doc,.docx'")+" required></div><div class='field'><label>"+(isPhoto?"Caption":"Title")+"</label><input class='input' id='evidence-title' placeholder='"+(isPhoto?"e.g. Serial plate":"e.g. Service invoice")+"' required></div>"+(isPhoto?"<div class='field'><label>Photo type</label><select class='input' id='photo-type'><option value='machine'>Machine</option><option value='serial_plate'>Serial / model plate</option><option value='service_evidence'>Service evidence</option><option value='damage'>Damage / issue</option></select></div>":"<div class='field'><label>Document type</label><select class='input' id='document-type'><option value='service_record'>Service record</option><option value='invoice'>Invoice</option><option value='manual'>Manual</option><option value='other'>Other</option></select></div>")+"<button class='btn' style='width:100%'>Upload</button></form></div></div>");
+  document.querySelector("#evidence-form").addEventListener("submit",e=>saveEvidence(e,kind))
+}
+async function saveEvidence(e,kind){
+  e.preventDefault();
+  const m=state.selected,file=document.querySelector("#evidence-file")?.files?.[0],title=val("#evidence-title");
+  if(!file)return;
+  if(state.demo){closeModal();toast("Demo mode: upload preview only");return}
+  try{
+    const org=state.org.id, ext=(file.name.split(".").pop()||"bin").toLowerCase();
+    const path="org/"+org+"/machines/"+m.id+"/"+Date.now()+"-"+crypto.randomUUID()+"."+ext;
+    const bucket="reelmow-garage-private";
+    const up=await state.client.storage.from(bucket).upload(path,file,{contentType:file.type||"application/octet-stream",upsert:false});
+    if(up.error)throw up.error;
+    if(kind==="photo"){
+      const {error}=await state.client.schema("garage").from("machine_photos").insert({machine_id:m.id,storage_bucket:bucket,storage_path:path,caption:title,photo_type:val("#photo-type"),mime_type:file.type||null,file_size_bytes:file.size,captured_at:new Date().toISOString(),created_by:state.user.id});
+      if(error)throw error;
+    }else{
+      const {error}=await state.client.schema("garage").from("machine_documents").insert({machine_id:m.id,title,document_type:val("#document-type"),storage_bucket:bucket,storage_path:path,mime_type:file.type||null,file_size_bytes:file.size,source:"upload",created_by:state.user.id});
+      if(error)throw error;
+    }
+    closeModal();await loadEvidence(m);toast(isPhotoText(kind)+" added");
+  }catch(x){toast(x.message||"Upload failed")}
+}
+function isPhotoText(kind){return kind==="photo"?"Photo":"Document"}
+async function openDocument(id){
+  const d=state.machineDocuments?.find(x=>x.id===id);if(!d)return;
+  if(state.demo)return toast("Demo document preview");
+  const {data,error}=await state.client.storage.from(d.storage_bucket).createSignedUrl(d.storage_path,3600);
+  if(error)return toast(error.message);
+  window.open(data.signedUrl,"_blank","noopener,noreferrer")
 }
 function serviceDueHtml(){
   if(!state.serviceDue.length)return "<div class='empty-mini'><div class='tiny'>No published service schedule for this machine yet.</div><div class='tiny' style='margin-top:5px'>REELMOW will only show maintenance rules that have been sourced and validated.</div></div>";
@@ -233,6 +297,9 @@ document.addEventListener("click",e=>{
   if(x==="back"){state.selected=null;state.specs=[];return render()}
   if(x==="edit")return toast("Machine editing is coming in the next Garage build.");
   if(x==="hours")return hoursModal();
+  if(x==="document-upload")return evidenceUploadModal("document");
+  if(x==="photo-upload")return evidenceUploadModal("photo");
+  if(x==="open-document")return openDocument(e.target.closest("[data-id]")?.dataset.id);
   if(x==="service")return serviceModal();
   if(x==="signup")return signUp();
 });
