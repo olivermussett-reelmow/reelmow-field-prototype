@@ -21,3 +21,7 @@ Catalogue data is canonical and shared. Customer Garage data is tenant-owned. AI
 ## Deployment trigger
 
 Changes merged to `main` are configured to deploy to the production Supabase database. This file is also used as a harmless deployment trigger when the GitHub connection is first enabled.
+
+## Deployment verification
+
+The integration must be enabled before commits to `main` can trigger the production migration workflow.
