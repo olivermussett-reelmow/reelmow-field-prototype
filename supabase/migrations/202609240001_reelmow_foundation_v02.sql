@@ -234,7 +234,10 @@ create table if not exists catalogue.service_schedule_rules (
   confidence catalogue.confidence_level not null default 'unknown',
   status catalogue.record_status not null default 'draft',
   created_at timestamptz not null default now(),
-  check(interval_engine_hours is not null or interval_reel_hours is not null or interval_calendar_days is not null or trigger_description is not null)
+  check(interval_engine_hours is not null or interval_reel_hours is not null or interval_calendar_days is not null or trigger_description is not null),
+  check(interval_engine_hours is null or interval_engine_hours >= 0),
+  check(interval_reel_hours is null or interval_reel_hours >= 0),
+  check(interval_calendar_days is null or interval_calendar_days >= 0)
 );
 
 -- ---------- ingestion ----------
@@ -338,7 +341,7 @@ create table if not exists garage.machines (
   asset_number text,
   nickname text,
   purchase_date date,
-  purchase_price numeric(12,2),
+  purchase_price numeric(12,2) check(purchase_price is null or purchase_price >= 0),
   current_engine_hours numeric(12,2) check(current_engine_hours is null or current_engine_hours >= 0),
   current_reel_hours numeric(12,2) check(current_reel_hours is null or current_reel_hours >= 0),
   status garage.machine_status not null default 'ready',
@@ -360,7 +363,9 @@ create table if not exists garage.machine_hours_log (
   source text not null default 'manual',
   notes text,
   created_by uuid references auth.users(id) on delete set null,
-  check(engine_hours is not null or reel_hours is not null)
+  check(engine_hours is not null or reel_hours is not null),
+  check(engine_hours is null or engine_hours >= 0),
+  check(reel_hours is null or reel_hours >= 0)
 );
 
 create table if not exists garage.machine_service_records (
@@ -371,12 +376,14 @@ create table if not exists garage.machine_service_records (
   engine_hours numeric(12,2),
   reel_hours numeric(12,2),
   performed_by text,
-  cost numeric(12,2),
+  cost numeric(12,2) check(cost is null or cost >= 0),
   notes text,
   invoice_storage_path text,
   evidence jsonb not null default '{}'::jsonb,
   created_by uuid references auth.users(id) on delete set null,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  check(engine_hours is null or engine_hours >= 0),
+  check(reel_hours is null or reel_hours >= 0)
 );
 
 create table if not exists garage.machine_documents (
@@ -399,6 +406,15 @@ create table if not exists garage.machine_photos (
   created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now()
 );
+
+create index if not exists memberships_user_idx on garage.memberships(user_id);
+create index if not exists machines_garage_idx on garage.machines(garage_id);
+create index if not exists machines_variant_idx on garage.machines(machine_variant_id);
+create index if not exists machine_hours_machine_idx on garage.machine_hours_log(machine_id);
+create index if not exists service_records_machine_idx on garage.machine_service_records(machine_id);
+create index if not exists service_records_task_idx on garage.machine_service_records(service_task_id);
+create index if not exists machine_documents_machine_idx on garage.machine_documents(machine_id);
+create index if not exists machine_photos_machine_idx on garage.machine_photos(machine_id);
 
 -- ---------- security helpers ----------
 create or replace function private.is_org_member(target_org uuid)
@@ -551,10 +567,19 @@ $$;
 
 create or replace view garage.machine_service_summary with (security_invoker = true) as
 select m.id machine_id, m.garage_id, m.machine_variant_id, m.current_engine_hours, m.current_reel_hours,
-       max(msr.serviced_at) last_service_at, max(msr.engine_hours) last_service_engine_hours,
+       ls.serviced_at last_service_at, ls.engine_hours last_service_engine_hours, ls.reel_hours last_service_reel_hours,
        count(msr.id) service_count
-from garage.machines m left join garage.machine_service_records msr on msr.machine_id=m.id
-group by m.id,m.garage_id,m.machine_variant_id,m.current_engine_hours,m.current_reel_hours;
+from garage.machines m
+left join lateral (
+  select x.serviced_at, x.engine_hours, x.reel_hours
+  from garage.machine_service_records x
+  where x.machine_id=m.id
+  order by x.serviced_at desc, x.created_at desc
+  limit 1
+) ls on true
+left join garage.machine_service_records msr on msr.machine_id=m.id
+group by m.id,m.garage_id,m.machine_variant_id,m.current_engine_hours,m.current_reel_hours,
+         ls.serviced_at,ls.engine_hours,ls.reel_hours;
 
 -- ---------- machine profile / service due ----------
 create or replace view garage.machine_catalogue_profile with (security_invoker = true) as
@@ -585,7 +610,7 @@ select m.id machine_id, st.id service_task_id, st.task_name,
        end as reel_hours_remaining,
        case
          when ssr.interval_calendar_days is not null
-           then (coalesce(ls.serviced_at, now()) + make_interval(days => ssr.interval_calendar_days))::date
+           then (coalesce(ls.serviced_at, m.created_at) + make_interval(days => ssr.interval_calendar_days))::date
          else null
        end as calendar_due_date
 from garage.machines m
