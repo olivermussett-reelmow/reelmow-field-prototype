@@ -233,6 +233,14 @@ begin
   if service_engine_hours is not null and service_engine_hours < 0 then raise exception 'engine hours cannot be negative'; end if;
   if service_reel_hours is not null and service_reel_hours < 0 then raise exception 'reel hours cannot be negative'; end if;
   if service_cost is not null and service_cost < 0 then raise exception 'cost cannot be negative'; end if;
+  if target_service_task is not null and not exists (
+    select 1
+    from catalogue.service_tasks st
+    join garage.machines mx on mx.machine_variant_id = st.machine_variant_id
+    where st.id = target_service_task and mx.id = target_machine and st.status = 'active'
+  ) then
+    raise exception 'service task does not belong to this machine';
+  end if;
 
   insert into garage.machine_service_records(
     machine_id,service_task_id,serviced_at,engine_hours,reel_hours,
@@ -246,7 +254,11 @@ begin
   returning id into new_record;
 
   update garage.machines
-  set current_engine_hours = greatest(coalesce(current_engine_hours,0),coalesce(service_engine_hours,current_engine_hours,0)),
+  set current_engine_hours = case
+        when service_engine_hours is null then current_engine_hours
+        when current_engine_hours is null then service_engine_hours
+        else greatest(current_engine_hours,service_engine_hours)
+      end,
       current_reel_hours = case
         when service_reel_hours is null then current_reel_hours
         when current_reel_hours is null then service_reel_hours
