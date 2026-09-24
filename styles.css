@@ -4,3 +4,5 @@
 
 
 .build-banner{margin:12px auto 0;max-width:1180px;padding:8px 12px;border:1px solid rgba(180,255,70,.25);border-radius:999px;background:rgba(180,255,70,.08);color:#b9ef62;font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;text-align:center}
+
+.input[rows]{height:auto;min-height:96px;padding:12px 13px;resize:vertical;line-height:1.45}.empty-mini{padding:14px 0}.empty-mini .tiny{max-width:520px}.service-summary{display:flex;justify-content:space-between;align-items:center;gap:12px}.select{appearance:auto}
