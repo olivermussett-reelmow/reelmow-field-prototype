@@ -641,7 +641,7 @@ on conflict(key) do nothing;
 insert into catalogue.sources(manufacturer_id,source_kind,title,canonical_url,publisher,is_primary)
 select id,'operator_manual','Jacobsen LF3800 Operator Manual','https://www.jacobsen.com/manuals/4129587_205_a.pdf','Jacobsen',true
 from catalogue.manufacturers where slug='jacobsen'
-on conflict(canonical_url) do nothing;
+on conflict do nothing;
 
 -- Facts are inserted as VERIFIED only after the source document has been reviewed.
 -- These values are the current golden-machine reference values used by the REELMOW prototype.
