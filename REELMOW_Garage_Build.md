@@ -10,6 +10,8 @@ Sign in -> Organisation -> Garage -> Add Machine -> Catalogue Search -> Physical
 
 The prototype uses the Supabase browser client with the public anon key. Never use a service-role key in the browser.
 
+Because the data model deliberately uses custom schemas, the Supabase Data API must expose `catalogue` and `garage`. Keep `private` and `ingestion` unexposed. The frontend uses explicit `.schema('catalogue')` and `.schema('garage')` calls.
+
 For this static prototype, connection settings are stored locally in the browser. For a production build, inject `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` at build/deploy time.
 
 ## Demo mode
