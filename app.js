@@ -4,7 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const CONFIG_KEY="reelmow.connection.v1", DEMO_KEY="reelmow.demo.v1";
 const app=document.querySelector("#app");
 const demoCatalogue=[{model_id:"830038a1-6367-4beb-87f1-f692c98dc9ef",manufacturer_name:"Jacobsen",model_name:"LF3800",variant_id:"c7834745-3328-4d30-ae8a-bb35f7798848",variant_name:"LF3800 5-Gang",machine_type:"Cylinder Mower",rank:1}];
-const state={client:null,user:null,org:null,garage:null,machines:[],selected:null,specs:[],serviceDue:[],serviceRecords:[],hoursLog:[],catalogueResults:[],loading:false,error:"",demo:localStorage.getItem(DEMO_KEY)==="true"};
+const state={client:null,user:null,org:null,garage:null,machines:[],selected:null,specs:[],serviceDue:[],serviceRecords:[],hoursLog:[],catalogueResults:[],loading:false,error:"",pendingPlateFile:null,demo:localStorage.getItem(DEMO_KEY)==="true"};
 
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const val=s=>document.querySelector(s)?.value.trim()||"";
@@ -15,7 +15,17 @@ const cfg=()=>{try{return JSON.parse(localStorage.getItem(CONFIG_KEY)||"null")}c
 const connected=()=>{const c=cfg();return !!(c?.url&&c?.key)};
 function toast(t){document.querySelector(".toast")?.remove();const e=document.createElement("div");e.className="toast";e.textContent=t;document.body.appendChild(e);setTimeout(()=>e.remove(),2600)}
 function modal(h){document.querySelector(".modal-backdrop")?.remove();document.body.insertAdjacentHTML("beforeend",h)}
-function closeModal(){document.querySelector(".modal-backdrop")?.remove()}
+function closeModal(){document.querySelector(".modal-backdrop")?.remove();state.pendingPlateFile=null}
+async function imageDataUrl(file,maxSize=1600,quality=.82){
+  if(!file||!file.type.startsWith("image/")) throw new Error("Please choose an image");
+  if(file.size>12_000_000) throw new Error("Image is too large. Please choose a photo under 12 MB.");
+  const bitmap=await createImageBitmap(file);
+  const scale=Math.min(1,maxSize/Math.max(bitmap.width,bitmap.height));
+  const canvas=document.createElement("canvas");
+  canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));
+  const ctx=canvas.getContext("2d");ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close();
+  return canvas.toDataURL("image/jpeg",quality);
+}
 
 async function connect(){
   if(state.demo)return;
@@ -260,11 +270,11 @@ function machineModal(r){
 }
 async function identifyPlate(file){
   if(!file)return;
+  state.pendingPlateFile=file;
   const box=document.querySelector("#plate-result");if(box)box.innerHTML="<div class='note'>Reading plate…</div>";
   if(state.demo){if(box)box.innerHTML="<div class='note'>Demo mode: plate scan preview. In the live build this will use AI/OCR.</div>";return}
   try{
-    const reader=new FileReader();
-    const data=await new Promise((resolve,reject)=>{reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file)});
+    const data=await imageDataUrl(file);
     const {data:result,error}=await state.client.functions.invoke("identify-machine",{body:{image_data_url:data}});
     if(error)throw error;
     if(result?.error)throw new Error(result.error);
@@ -278,7 +288,22 @@ async function saveMachine(e,r){
   e.preventDefault();
   const p={garage_id:state.garage.id,machine_variant_id:r.variant_id,serial_number:val("#serial"),asset_number:val("#asset"),nickname:val("#nickname"),purchase_date:val("#date")||null,current_engine_hours:num("#hours"),current_reel_hours:num("#reel"),created_by:state.user?.id||null};
   if(state.demo){state.machines.unshift({...p,id:crypto.randomUUID(),status:"ready",variant:{variant_name:r.variant_name},model:{model_name:r.model_name},manufacturer:{name:r.manufacturer_name}});closeModal();toast("Machine added to Garage");return render()}
-  try{const {error}=await state.client.schema("garage").from("machines").insert(p);if(error)throw error;closeModal();await loadMachines();toast("Machine added to Garage");render()}catch(x){toast(x.message||"Could not add machine")}
+  try{
+    const {data:created,error}=await state.client.schema("garage").from("machines").insert(p).select("id").single();
+    if(error)throw error;
+    if(state.pendingPlateFile){
+      const file=state.pendingPlateFile,bucket="reelmow-garage-private",path="org/"+state.org.id+"/machines/"+created.id+"/"+Date.now()+"-"+crypto.randomUUID()+".jpg";
+      const up=await state.client.storage.from(bucket).upload(path,file,{contentType:file.type||"image/jpeg",upsert:false});
+      if(!up.error){
+        const {error:pe}=await state.client.schema("garage").from("machine_photos").insert({
+          machine_id:created.id,storage_bucket:bucket,storage_path:path,caption:"Machine model / serial plate",photo_type:"serial_plate",
+          mime_type:file.type||"image/jpeg",file_size_bytes:file.size,captured_at:new Date().toISOString(),created_by:state.user?.id||null
+        });
+        if(pe)toast("Machine added, but plate evidence could not be saved.");
+      }else toast("Machine added, but plate photo upload failed.");
+    }
+    state.pendingPlateFile=null;closeModal();await loadMachines();toast("Machine added to Garage");render()
+  }catch(x){toast(x.message||"Could not add machine")}
 }
 async function createOrg(e){
   e.preventDefault();try{const {data,error}=await state.client.schema("garage").rpc("create_organization",{org_name:val("#org-name"),org_slug:slug(val("#org-name"))+"-"+Math.random().toString(36).slice(2,7)});if(error)throw error;const {error:g}=await state.client.schema("garage").from("garages").insert({organization_id:data,name:val("#garage-name"),location_name:val("#garage-location")});if(g)throw g;await loadWorkspace();render()}catch(x){state.error=x.message;render()}
