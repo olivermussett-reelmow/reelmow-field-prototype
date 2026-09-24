@@ -542,7 +542,7 @@ returns table(model_id uuid, manufacturer_name text, model_name text, variant_id
 language sql stable security invoker set search_path=''
 as $$
   select s.model_id,s.manufacturer_name,s.model_name,s.variant_id,s.variant_name,s.machine_type,
-         greatest(similarity(s.model_name,search_text),similarity(coalesce(s.variant_name,''),search_text),similarity(s.manufacturer_name,search_text)) as rank
+         greatest(public.similarity(s.model_name,search_text),public.similarity(coalesce(s.variant_name,''),search_text),public.similarity(s.manufacturer_name,search_text)) as rank
   from catalogue.machine_search s
   where s.model_name ilike '%'||search_text||'%' or s.variant_name ilike '%'||search_text||'%' or s.manufacturer_name ilike '%'||search_text||'%'
   order by rank desc, s.manufacturer_name, s.model_name
