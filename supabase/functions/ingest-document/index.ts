@@ -62,6 +62,20 @@ Deno.serve(async req=>{
     const {data:doc,error:de}=await supabase.schema("catalogue").from("documents").select("id,title,document_type,machine_model_id,machine_variant_id").eq("id",documentId).single();
     if(de) throw de;
 
+    // A bearer token is intentionally required for this internal ingestion
+    // endpoint, but it must not be enough to mix arbitrary jobs/documents.
+    // Require an explicit job-document relationship before invoking the model.
+    const {data:jobDocument,error:jde}=await supabase.schema("ingestion").from("job_documents")
+      .select("id,job_id,document_id,fetch_status,content_length")
+      .eq("job_id",jobId)
+      .eq("document_id",documentId)
+      .limit(1)
+      .maybeSingle();
+    if(jde) throw jde;
+    if(!jobDocument) throw new Error("Document is not attached to the supplied ingestion job");
+    if(jobDocument.fetch_status && jobDocument.fetch_status!=="fetched")
+      throw new Error("Document has not completed fetching");
+
     const {data:run,error:re}=await supabase.schema("ingestion").from("ai_runs").insert({
       job_id:jobId,document_id:documentId,provider:"openai",model:"gpt-5.5",task:"catalogue_document_extraction",status:"running"
     }).select("id").single();
