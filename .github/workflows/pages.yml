@@ -36,6 +36,22 @@ jobs:
           ls -la
           echo "index.html found at repository root."
 
+      - name: Configure runtime configuration
+        shell: bash
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+          const url = process.env.SUPABASE_URL || '';
+          const key = process.env.SUPABASE_PUBLISHABLE_KEY || '';
+          const js = 'window.REELMOW_CONFIG = ' + JSON.stringify({ url, key }) + ';\\n';
+          fs.writeFileSync('reelmow.config.js', js, 'utf8');
+          NODE
+          echo "Runtime configuration generated for the Pages artifact."
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
