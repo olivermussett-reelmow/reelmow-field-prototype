@@ -1,5 +1,5 @@
 begin;
-select extensions.plan(10);
+select extensions.plan(11);
 select extensions.ok(exists(select 1 from catalogue.manufacturers where slug='protea'),'Protea seeded');
 select extensions.ok(exists(select 1 from catalogue.machine_models where model_code='SC610'),'SC610 seeded');
 select extensions.ok(exists(select 1 from catalogue.machine_variants where variant_code='SC610-24'),'Protea SC610 variant seeded');
@@ -10,5 +10,17 @@ select extensions.ok((select count(*) from catalogue.machine_variants where vari
 select extensions.ok(exists(select 1 from catalogue.search_machines('Protea',12)),'Protea search works');
 select extensions.ok(exists(select 1 from catalogue.search_machines('Shaver 24',12)),'Shaver search works');
 select extensions.ok((select count(*) from catalogue.search_machines('Royale 24',12))=2,'Royale search returns both variants');
+select extensions.ok(
+  exists(
+    select 1 from catalogue.facts f
+    join catalogue.spec_definitions sd on sd.id=f.spec_definition_id
+    join catalogue.machine_variants mv on mv.id=f.machine_variant_id
+    where mv.variant_code='SC610-24'
+      and sd.key='reel_blades'
+      and f.value_text='12'
+      and f.value_number is null
+  ),
+  'SC610 reel blade count uses canonical text type'
+);
 select * from extensions.finish();
 rollback;
