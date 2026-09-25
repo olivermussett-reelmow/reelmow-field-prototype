@@ -130,12 +130,37 @@ function renderGarage(){
   const attention=due.filter(x=>x.service_status==="due").length;
   const upcoming=due.filter(x=>x.service_status==="upcoming").length;
   const totalHours=list.reduce((sum,m)=>sum+(Number(m.current_engine_hours)||0),0);
-  mount("<section class='command-hero'><div><div class='eyebrow'>"+esc(state.demo?"Demo Garage":state.org?.name||"Garage")+"</div><h1>Machinery,<br>under control.</h1><p class='lede' style='color:#d2e1d8'>A single operational view of your fleet, service position and machine records.</p><div class='actions' style='margin-top:23px'><button class='btn' data-action='add'>＋ Add machine</button></div></div><div class='command-hero-side'><div class='hero-side-label'>Fleet status</div><div class='hero-side-number'>"+list.length+"</div><div class='hero-side-copy'>machines in "+esc(state.garage?.name||"your Garage")+"</div></div></section>"+
-  "<section class='kpi-grid'><div class='kpi-card'><div class='kpi-label'>Fleet</div><div class='kpi-value'>"+list.length+"</div><div class='kpi-meta'>Total machines</div></div><div class='kpi-card "+(attention?"alert":"")+"'><div class='kpi-label'>Attention</div><div class='kpi-value'>"+attention+"</div><div class='kpi-meta'>Service items due</div></div><div class='kpi-card'><div class='kpi-label'>Upcoming</div><div class='kpi-value'>"+upcoming+"</div><div class='kpi-meta'>Published service items</div></div><div class='kpi-card'><div class='kpi-label'>Engine time</div><div class='kpi-value'>"+(totalHours?Math.round(totalHours):"—")+"</div><div class='kpi-meta'>Recorded fleet hours</div></div></section>"+
-  "<div class='section-head'><div><div class='eyebrow'>Operations</div><h2>What needs attention?</h2></div><button class='btn secondary small' data-action='add'>Add machine</button></div>"+
-  (attention?"<div class='attention-list'>"+due.filter(x=>x.service_status==="due").slice(0,5).map(x=>{const m=list.find(v=>v.id===x.machine_id);return "<button class='attention-row' data-action='open' data-id='"+esc(x.machine_id)+"'><span><strong>"+esc(m?.nickname||m?.model?.model_name||"Machine")+"</strong><small>"+esc(x.task_name||"Service task")+"</small></span><span class='badge service'>DUE</span></button>"}).join("")+"</div>":"<div class='card calm-card'><div class='calm-mark'>✓</div><div><strong>Fleet is up to date.</strong><div class='tiny'>No published service tasks are currently due.</div></div></div>")+
-  "<div class='section-head'><div><div class='eyebrow'>Garage</div><h2>Your machinery</h2></div></div>"+
-  (list.length?"<div class='grid'>"+list.map(card).join("")+"</div>":"<div class='card empty'><div class='empty-icon'>⚙︎</div><h2>Your Garage is empty.</h2><p class='lede' style='margin:0 auto 18px'>Start by adding a machine from the REELMOW catalogue.</p><button class='btn' data-action='add'>Add your first machine</button></div>")
+  const attentionRows=due.filter(x=>x.service_status==="due").slice(0,5).map(x=>{
+    const m=list.find(v=>v.id===x.machine_id);
+    return `<button class="attention-row" data-action="open" data-id="${esc(x.machine_id)}"><span><strong>${esc(m?.nickname||m?.model?.model_name||"Machine")}</strong><small>${esc(x.task_name||"Service task")}</small></span><span class="badge service">DUE</span></button>`;
+  }).join("");
+  const operations=attention
+    ? `<div class="attention-list">${attentionRows}</div>`
+    : `<div class="card calm-card"><div class="calm-mark">✓</div><div><strong>Fleet is up to date.</strong><div class="tiny">No published service tasks are currently due.</div></div></div>`;
+  const fleet=list.length
+    ? `<div class="grid">${list.map(card).join("")}</div>`
+    : `<div class="card empty"><div class="empty-icon">⚙︎</div><h2>Your Garage is empty.</h2><p class="lede" style="margin:0 auto 18px">Start by adding a machine from the REELMOW catalogue.</p><button class="btn" data-action="add">Add your first machine</button></div>`;
+  mount(`
+    <section class="command-hero">
+      <div>
+        <div class="eyebrow">${esc(state.demo?"Demo Garage":state.org?.name||"Garage")}</div>
+        <h1>Machinery,<br>under control.</h1>
+        <p class="lede" style="color:#d2e1d8">A single operational view of your fleet, service position and machine records.</p>
+        <div class="actions" style="margin-top:23px"><button class="btn" data-action="add">＋ Add machine</button></div>
+      </div>
+      <div class="command-hero-side"><div class="hero-side-label">Fleet status</div><div class="hero-side-number">${list.length}</div><div class="hero-side-copy">machines in ${esc(state.garage?.name||"your Garage")}</div></div>
+    </section>
+    <section class="kpi-grid">
+      <div class="kpi-card"><div class="kpi-label">Fleet</div><div class="kpi-value">${list.length}</div><div class="kpi-meta">Total machines</div></div>
+      <div class="kpi-card ${attention?"alert":""}"><div class="kpi-label">Attention</div><div class="kpi-value">${attention}</div><div class="kpi-meta">Service items due</div></div>
+      <div class="kpi-card"><div class="kpi-label">Upcoming</div><div class="kpi-value">${upcoming}</div><div class="kpi-meta">Published service items</div></div>
+      <div class="kpi-card"><div class="kpi-label">Engine time</div><div class="kpi-value">${totalHours?Math.round(totalHours):"—"}</div><div class="kpi-meta">Recorded fleet hours</div></div>
+    </section>
+    <div class="section-head"><div><div class="eyebrow">Operations</div><h2>What needs attention?</h2></div><button class="btn secondary small" data-action="add">Add machine</button></div>
+    ${operations}
+    <div class="section-head"><div><div class="eyebrow">Garage</div><h2>Your machinery</h2></div></div>
+    ${fleet}
+  `);
 }
 
 function renderDetail(){
