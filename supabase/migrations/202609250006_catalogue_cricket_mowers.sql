@@ -1,5 +1,6 @@
 -- REELMOW catalogue expansion: cricket / fine-turf machines
 -- Adds the three additional machines used by the REELMOW prototype test garage.
+-- Variant-scoped facts intentionally populate only machine_variant_id because facts_scope_exactly_one requires exactly one scope.
 -- Canonical identity is seeded conservatively; exact physical variant/serial remains a user confirmation step.
 
 -- ---------- shared specification definitions ----------
@@ -64,12 +65,12 @@ with refs as (
     ('working_width',609.6,'mm','verified'::catalogue.confidence_level),
     ('reel_blades',12,null,'verified'::catalogue.confidence_level)
 )
-insert into catalogue.facts(machine_model_id,machine_variant_id,spec_definition_id,value_number,unit,confidence,status)
-select refs.model_id,refs.variant_id,sd.id,vals.value_number,vals.unit,vals.confidence,'active'
+insert into catalogue.facts(machine_variant_id,spec_definition_id,value_number,unit,confidence,status)
+select refs.variant_id,sd.id,vals.value_number,vals.unit,vals.confidence,'active'
 from refs cross join vals join catalogue.spec_definitions sd on sd.key=vals.key
 on conflict do nothing;
 
-insert into catalogue.facts(machine_model_id,machine_variant_id,spec_definition_id,value_number,unit,confidence,status)
+insert into catalogue.facts(machine_variant_id,spec_definition_id,value_number,unit,confidence,status)
 select mm.id,mv.id,sd.id,2.5,'mm','verified','active'
 from catalogue.machine_models mm
 join catalogue.machine_variants mv on mv.machine_model_id=mm.id and mv.variant_name='SC610 24-inch'
@@ -77,7 +78,7 @@ join catalogue.spec_definitions sd on sd.key='height_of_cut_min'
 where mm.slug='sc610-supercut'
 on conflict do nothing;
 
-insert into catalogue.facts(machine_model_id,machine_variant_id,spec_definition_id,value_text,confidence,status)
+insert into catalogue.facts(machine_variant_id,spec_definition_id,value_text,confidence,status)
 select mm.id,mv.id,sd.id,'5HP/6HP','verified','active'
 from catalogue.machine_models mm
 join catalogue.machine_variants mv on mv.machine_model_id=mm.id and mv.variant_name='SC610 24-inch'
@@ -139,12 +140,12 @@ with refs as (
     ('weight',91.5,'kg'),
     ('overall_width',788,'mm')
 )
-insert into catalogue.facts(machine_model_id,machine_variant_id,spec_definition_id,value_number,unit,confidence,status)
-select refs.model_id,refs.variant_id,sd.id,vals.value_number,vals.unit,'verified','active'
+insert into catalogue.facts(machine_variant_id,spec_definition_id,value_number,unit,confidence,status)
+select refs.variant_id,sd.id,vals.value_number,vals.unit,'verified','active'
 from refs cross join vals join catalogue.spec_definitions sd on sd.key=vals.key
 on conflict do nothing;
 
-insert into catalogue.facts(machine_model_id,machine_variant_id,spec_definition_id,value_number,unit,confidence,status)
+insert into catalogue.facts(machine_variant_id,spec_definition_id,value_number,unit,confidence,status)
 select mm.id,mv.id,sd.id,3.6,'kW','verified','active'
 from catalogue.machine_models mm
 join catalogue.machine_variants mv on mv.machine_model_id=mm.id and mv.variant_name='Shaver 24'
@@ -152,7 +153,7 @@ join catalogue.spec_definitions sd on sd.key='engine_power'
 where mm.slug='shaver'
 on conflict do nothing;
 
-insert into catalogue.facts(machine_model_id,machine_variant_id,spec_definition_id,value_text,confidence,status)
+insert into catalogue.facts(machine_variant_id,spec_definition_id,value_text,confidence,status)
 select mm.id,mv.id,sd.id,'Honda GX160','verified','active'
 from catalogue.machine_models mm
 join catalogue.machine_variants mv on mv.machine_model_id=mm.id and mv.variant_name='Shaver 24'
@@ -160,7 +161,7 @@ join catalogue.spec_definitions sd on sd.key='engine'
 where mm.slug='shaver'
 on conflict do nothing;
 
-insert into catalogue.facts(machine_model_id,machine_variant_id,spec_definition_id,value_text,confidence,status)
+insert into catalogue.facts(machine_variant_id,spec_definition_id,value_text,confidence,status)
 select mm.id,mv.id,sd.id,'10','verified','active'
 from catalogue.machine_models mm
 join catalogue.machine_variants mv on mv.machine_model_id=mm.id and mv.variant_name='Shaver 24'
@@ -168,7 +169,7 @@ join catalogue.spec_definitions sd on sd.key='reel_blades'
 where mm.slug='shaver'
 on conflict do nothing;
 
-insert into catalogue.facts(machine_model_id,machine_variant_id,spec_definition_id,value_text,confidence,status)
+insert into catalogue.facts(machine_variant_id,spec_definition_id,value_text,confidence,status)
 select mm.id,mv.id,sd.id,'Petrol','verified','active'
 from catalogue.machine_models mm
 join catalogue.machine_variants mv on mv.machine_model_id=mm.id and mv.variant_name='Shaver 24'
@@ -249,12 +250,12 @@ with refs as (
     ('weight',111,'kg'),
     ('overall_width',790,'mm')
 )
-insert into catalogue.facts(machine_model_id,machine_variant_id,spec_definition_id,value_number,unit,confidence,status)
-select refs.model_id,refs.variant_id,sd.id,vals.value_number,vals.unit,'provisional','active'
+insert into catalogue.facts(machine_variant_id,spec_definition_id,value_number,unit,confidence,status)
+select refs.variant_id,sd.id,vals.value_number,vals.unit,'provisional','active'
 from refs cross join vals join catalogue.spec_definitions sd on sd.key=vals.key
 on conflict do nothing;
 
-insert into catalogue.facts(machine_model_id,machine_variant_id,spec_definition_id,value_text,confidence,status)
+insert into catalogue.facts(machine_variant_id,spec_definition_id,value_text,confidence,status)
 select mm.id,mv.id,sd.id,'B&S Intek Pro','provisional','active'
 from catalogue.machine_models mm
 join catalogue.machine_variants mv on mv.machine_model_id=mm.id and mv.variant_code='F016310542'
@@ -262,7 +263,7 @@ join catalogue.spec_definitions sd on sd.key='engine'
 where mm.slug='royale-24'
 on conflict do nothing;
 
-insert into catalogue.facts(machine_model_id,machine_variant_id,spec_definition_id,value_text,confidence,status)
+insert into catalogue.facts(machine_variant_id,spec_definition_id,value_text,confidence,status)
 select mm.id,mv.id,sd.id,'Petrol','provisional','active'
 from catalogue.machine_models mm
 join catalogue.machine_variants mv on mv.machine_model_id=mm.id and mv.variant_code='F016310542'
