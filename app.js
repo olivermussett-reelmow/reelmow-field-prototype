@@ -24,7 +24,7 @@ const slug=v=>v.toLowerCase().trim().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g
 const initials=v=>(v||"RE").split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0]).join("").toUpperCase();
 const cfg=()=>{try{
   const runtime=window.REELMOW_CONFIG;
-  if(runtime?.url&&runtime?.key)return {url:String(runtime.url).replace(/\\/$/,""),key:String(runtime.key)};
+  if(runtime?.url&&runtime?.key)return {url:String(runtime.url).replace(/\/$/,""),key:String(runtime.key)};
   return JSON.parse(localStorage.getItem(CONFIG_KEY)||"null");
 }catch{return null}};
 const connected=()=>{const c=cfg();return !!(c?.url&&c?.key)};
