@@ -1,9 +1,9 @@
 -- REELMOW behavioral tenant-isolation tests.
--- Seed two synthetic organisations, then execute as authenticated user A.
--- All seed rows are rolled back at the end; no production data is used.
+-- Two synthetic organisations are seeded, then the database is queried as
+-- authenticated user A. Everything is rolled back at the end.
 begin;
 
-select plan(16);
+select extensions.plan(17);
 
 set local role postgres;
 
@@ -13,14 +13,8 @@ select extensions.ok(
 );
 
 create temporary table _reelmow_test_ids (
-  user_a uuid,
-  user_b uuid,
-  org_a uuid,
-  org_b uuid,
-  garage_a uuid,
-  garage_b uuid,
-  machine_a uuid,
-  machine_b uuid
+  user_a uuid, user_b uuid, org_a uuid, org_b uuid,
+  garage_a uuid, garage_b uuid, machine_a uuid, machine_b uuid
 ) on commit drop;
 
 insert into _reelmow_test_ids values (
@@ -58,99 +52,63 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000a1',true);
 select set_config('request.jwt.claim.role','authenticated',true);
 
-select is(auth.uid()::text,'00000000-0000-0000-0000-0000000000a1','JWT identity resolves to user A');
+select extensions.is(auth.uid()::text,'00000000-0000-0000-0000-0000000000a1','JWT identity resolves to user A');
 
-select is(
-  (select count(*) from garage.organizations),
-  1::bigint,
-  'user A sees only organisation A'
+select extensions.is((select count(*) from garage.organizations),1::bigint,'user A sees only organisation A');
+select extensions.is((select count(*) from garage.garages),1::bigint,'user A sees only garage A');
+select extensions.is((select count(*) from garage.machines),1::bigint,'user A sees only machine A');
+select extensions.is((select count(*) from garage.machines where id='00000000-0000-0000-0000-0000000000b4'),0::bigint,'user A cannot read machine B directly');
+select extensions.is((select count(*) from garage.memberships),1::bigint,'user A sees only their own membership');
+select extensions.is((select count(*) from garage.memberships where organization_id='00000000-0000-0000-0000-0000000000b2'),0::bigint,'user A cannot read organisation B membership');
+
+select extensions.lives_ok(
+  $$ update garage.machines set nickname='MUST NOT CHANGE' where id='00000000-0000-0000-0000-0000000000b4 $$,
+  'cross-tenant machine update is safely filtered'
 );
 
-select is(
-  (select count(*) from garage.garages),
-  1::bigint,
-  'user A sees only garage A'
-);
-
-select is(
-  (select count(*) from garage.machines),
-  1::bigint,
-  'user A sees only machine A'
-);
-
-select is(
+select extensions.is(
   (select count(*) from garage.machines where id='00000000-0000-0000-0000-0000000000b4'),
   0::bigint,
-  'user A cannot read machine B directly'
-);
-
-select is(
-  (select count(*) from garage.memberships),
-  1::bigint,
-  'user A sees only their own membership'
-);
-
-select is(
-  (select count(*) from garage.memberships where organization_id='00000000-0000-0000-0000-0000000000b2'),
-  0::bigint,
-  'user A cannot read organisation B membership'
-);
-
-select lives_ok(
-  $$ update garage.machines
-     set nickname='MUST NOT CHANGE'
-     where id='00000000-0000-0000-0000-0000000000b4' $$,
-  'cross-tenant machine update is rejected or safely filtered'
-);
-
-select is(
-  (select nickname from garage.machines where id='00000000-0000-0000-0000-0000000000b4'),
-  null::text,
   'machine B remains invisible after attempted update'
 );
 
-select lives_ok(
-  $$ delete from garage.machines
-     where id='00000000-0000-0000-0000-0000000000b4' $$,
-  'cross-tenant machine delete is rejected or safely filtered'
+select extensions.lives_ok(
+  $$ delete from garage.machines where id='00000000-0000-0000-0000-0000000000b4 $$,
+  'cross-tenant machine delete is safely filtered'
 );
 
-select ok(
+select extensions.ok(
   private.is_org_member('00000000-0000-0000-0000-0000000000a2'),
   'user A is member of organisation A'
 );
 
-select ok(
+select extensions.ok(
   not private.is_org_member('00000000-0000-0000-0000-0000000000b2'),
   'user A is not member of organisation B'
 );
 
-select ok(
-  private.has_org_role('00000000-0000-0000-0000-0000000000a2',
-    array['owner']::garage.member_role[]),
+select extensions.ok(
+  private.has_org_role('00000000-0000-0000-0000-0000000000a2',array['owner']::garage.member_role[]),
   'user A has owner role in organisation A'
 );
 
-select ok(
-  not private.has_org_role('00000000-0000-0000-0000-0000000000b2',
-    array['owner']::garage.member_role[]),
+select extensions.ok(
+  not private.has_org_role('00000000-0000-0000-0000-0000000000b2',array['owner']::garage.member_role[]),
   'user A has no role in organisation B'
 );
 
-select lives_ok(
-  $$ select garage.record_machine_hours(
-       '00000000-0000-0000-0000-0000000000b4',
-       10, null, 'test', 'cross tenant'
-     ) $$,
-  'cross-tenant hours call is safely rejected without database corruption'
+select extensions.throws_ok(
+  $$ select garage.record_machine_hours('00000000-0000-0000-0000-0000000000b4',10,null,'test','cross tenant') $$,
+  'P0001',
+  'not authorised',
+  'cross-tenant hours RPC is rejected'
 );
 
-select is(
-  (select count(*) from garage.machine_hours_log
-   where machine_id='00000000-0000-0000-0000-0000000000b4'),
+select extensions.is(
+  (select count(*) from garage.machine_hours_log where machine_id='00000000-0000-0000-0000-0000000000b4'),
   0::bigint,
   'cross-tenant hours record was not created'
 );
 
-select * from finish();
+select * from extensions.finish();
 rollback;
