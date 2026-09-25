@@ -1,5 +1,5 @@
 begin;
-select extensions.plan(13);
+select extensions.plan(15);
 select extensions.ok((select count(*)=3 from pg_proc where pronamespace='garage'::regnamespace and proname in ('create_organization','record_machine_hours','record_machine_service') and prosecdef),'customer Garage RPC wrappers use SECURITY DEFINER');
 select extensions.ok((select count(*)=3 from pg_proc where pronamespace='garage'::regnamespace and proname in ('create_organization','record_machine_hours','record_machine_service') and proconfig @> array['search_path=""']),'Garage RPC wrappers pin search_path');
 select extensions.ok(not exists(select 1 from pg_proc where pronamespace='catalogue'::regnamespace and proname='search_machines' and prosecdef),'catalogue search is SECURITY INVOKER');
@@ -13,5 +13,23 @@ select extensions.ok(not exists(select 1 from pg_policies where schemaname='inge
 select extensions.ok(not exists(select 1 from catalogue.facts where ((machine_model_id is null)::int+(machine_variant_id is null)::int)<>1),'catalogue fact scope integrity');
 select extensions.ok(not exists(select 1 from catalogue.facts where (value_text is not null)::int+(value_number is not null)::int+(value_boolean is not null)::int+(value_json is not null)::int<>1),'catalogue fact value integrity');
 select extensions.ok(exists(select 1 from pg_extension where extname='pgtap'),'pgTAP is installed');
+select extensions.ok(
+  not exists(
+    select 1 from pg_policies
+    where schemaname='storage' and tablename='objects'
+      and policyname in ('garage object read','garage object update','garage object delete')
+      and (coalesce(qual,'')||coalesce(with_check,'')) like '%storage.foldername(g.name)%'
+  ),
+  'garage storage policies scope the actual object path'
+);
+select extensions.ok(
+  exists(
+    select 1 from pg_policies
+    where schemaname='storage' and tablename='objects'
+      and policyname='garage object read'
+      and coalesce(qual,'') like '%storage.objects.name%'
+  ),
+  'garage storage read policy uses qualified object name'
+);
 select * from extensions.finish();
 rollback;
