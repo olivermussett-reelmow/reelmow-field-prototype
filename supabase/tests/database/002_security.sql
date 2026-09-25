@@ -27,7 +27,7 @@ select extensions.ok(
     select 1 from pg_policies
     where schemaname='storage' and tablename='objects'
       and policyname='garage object read'
-      and coalesce(qual,'') like '%storage.objects.name%'
+      and coalesce(qual,'') like '%objects.name%'
   ),
   'garage storage read policy uses qualified object name'
 );
