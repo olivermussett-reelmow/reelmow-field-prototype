@@ -36,3 +36,6 @@ The intended CI gate is:
     supabase test db
 
 Production deployment should not be considered green if the database test suite fails.
+
+
+CI validation: service/storage hardening and Edge Function deployment changes are covered by the live regression checks and clean-install database workflow.
