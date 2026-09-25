@@ -14,7 +14,8 @@ select extensions.ok(
   exists(
     select 1 from catalogue.facts f
     join catalogue.spec_definitions sd on sd.id=f.spec_definition_id
-    where f.machine_variant_id='019b888f-5fb5-40ed-a0c8-f999e6bc433e'
+    join catalogue.machine_variants mv on mv.id=f.machine_variant_id
+    where mv.variant_code='SC610-24'
       and sd.key='reel_blades'
       and f.value_text='12'
       and f.value_number is null
