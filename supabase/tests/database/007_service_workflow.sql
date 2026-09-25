@@ -15,7 +15,7 @@ insert into garage.machines(id,garage_id,machine_variant_id,nickname,created_by,
 values(
  '00000000-0000-0000-0000-0000000000d4',
  '00000000-0000-0000-0000-0000000000d3',
- 'c7834745-3328-4d30-ae8a-bb35f7798848',
+ (select mv.id from catalogue.machine_variants mv join catalogue.machine_models mm on mm.id=mv.machine_model_id where mm.slug='lf3800' and mv.variant_name='LF3800 5-Gang'),
  'Service Test Machine',
  '00000000-0000-0000-0000-0000000000d1',
  49
@@ -63,7 +63,7 @@ select extensions.ok(
 select extensions.ok(
   (select garage.record_machine_service(
     '00000000-0000-0000-0000-0000000000d4',
-    '81511092-1674-4c78-ae1c-0e56399ddc04',
+    (select st.id from catalogue.service_tasks st join catalogue.machine_variants mv on mv.id=st.machine_variant_id join catalogue.machine_models mm on mm.id=mv.machine_model_id where mm.slug='lf3800' and mv.variant_name='LF3800 5-Gang' and st.task_key='engine_oil_change'),
     now(),50,null,'REELMOW test',0,'initial service','{}'::jsonb
   )) is not null,
   'service RPC records the matching active task'
