@@ -94,7 +94,9 @@ async function search(q){
 }
 function shell(c){
   const ok=state.demo||connected();
-  return "<div class='shell'><header class='topbar'><div class='brand'><span class='mark'></span>REEL<span>MOW</span></div><nav class='top-nav'><button class='nav-link active' data-action='home'>Garage</button><button class='nav-link' data-action='add'>Catalogue</button></nav><div class='top-actions'><button class='btn ghost small' data-action='connection'><span class='dot "+(ok?"ok":"")+"'></span>"+(ok?"Connected":"Connect")+"</button>"+(state.user?"<div class='avatar'>"+esc(initials(state.user.email))+"</div>":"")+"</div></header><main class='page'>"+c+"</main><div class='footer'>REELMOW Garage · Every machine. Every manual. Every service. One place.</div></div>"
+  const connectionLabel=state.demo?"Demo mode":connected()?"Connected":"Connect";
+  const connectionClass=state.demo?"demo":connected()?"ok":"";
+  return "<div class='shell'><header class='topbar'><div class='brand'><span class='mark'></span>REEL<span>MOW</span></div><nav class='top-nav'><button class='nav-link active' data-action='home'>Garage</button><button class='nav-link' data-action='add'>Catalogue</button></nav><div class='top-actions'><button class='btn ghost small' data-action='connection'><span class='dot "+connectionClass+"'></span>"+connectionLabel+"</button>"+(state.user?"<div class='avatar'>"+esc(initials(state.user.email))+"</div>":"")+"</div></header><main class='page'>"+c+"</main><div class='footer'>REELMOW Garage · Every machine. Every manual. Every service. One place.</div></div>"
 }
 function mount(c){app.innerHTML="<div class='app'>"+shell(c)+"</div>"}
 function render(){
