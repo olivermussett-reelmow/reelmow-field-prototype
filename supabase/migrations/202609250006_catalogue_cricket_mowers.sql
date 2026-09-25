@@ -169,7 +169,7 @@ where mm.slug='shaver'
 on conflict do nothing;
 
 insert into catalogue.facts(machine_model_id,machine_variant_id,spec_definition_id,value_text,confidence,status)
-select mm.id,mv.id,sd.id,'No','verified','active'
+select mm.id,mv.id,sd.id,'Petrol','verified','active'
 from catalogue.machine_models mm
 join catalogue.machine_variants mv on mv.machine_model_id=mm.id and mv.variant_name='Shaver 24'
 join catalogue.spec_definitions sd on sd.key='fuel'
