@@ -72,7 +72,7 @@ select extensions.is((select count(*) from garage.memberships),1::bigint,'user A
 select extensions.is((select count(*) from garage.memberships where organization_id='00000000-0000-0000-0000-0000000000b2'),0::bigint,'user A cannot read organisation B membership');
 
 select extensions.lives_ok(
-  $$ update garage.machines set nickname='MUST NOT CHANGE' where id='00000000-0000-0000-0000-0000000000b4 $$,
+  $q$update garage.machines set nickname='MUST NOT CHANGE' where id='00000000-0000-0000-0000-0000000000b4'$q$,
   'cross-tenant machine update is safely filtered'
 );
 
@@ -83,7 +83,7 @@ select extensions.is(
 );
 
 select extensions.lives_ok(
-  $$ delete from garage.machines where id='00000000-0000-0000-0000-0000000000b4 $$,
+  $q$delete from garage.machines where id='00000000-0000-0000-0000-0000000000b4'$q$,
   'cross-tenant machine delete is safely filtered'
 );
 
