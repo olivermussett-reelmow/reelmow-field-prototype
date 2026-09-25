@@ -9,7 +9,12 @@ async function loadSupabaseClient(){
 
 const CONFIG_KEY="reelmow.connection.v1", DEMO_KEY="reelmow.demo.v1";
 const app=document.querySelector("#app");
-const demoCatalogue=[{model_id:"830038a1-6367-4beb-87f1-f692c98dc9ef",manufacturer_name:"Jacobsen",model_name:"LF3800",variant_id:"c7834745-3328-4d30-ae8a-bb35f7798848",variant_name:"LF3800 5-Gang",machine_type:"Cylinder Mower",rank:1}];
+const demoCatalogue=[
+  {model_id:"830038a1-6367-4beb-87f1-f692c98dc9ef",manufacturer_name:"Jacobsen",model_name:"LF3800",variant_id:"c7834745-3328-4d30-ae8a-bb35f7798848",variant_name:"LF3800 5-Gang",machine_type:"Cylinder Mower",rank:1},
+  {model_id:"demo-protea-sc610",manufacturer_name:"Protea",model_name:"SC610 Supercut",variant_id:"demo-protea-sc610-24",variant_name:"SC610 24-inch",machine_type:"Cylinder Mower",rank:.98},
+  {model_id:"demo-allett-shaver",manufacturer_name:"Allett",model_name:"Shaver",variant_id:"demo-allett-shaver-24",variant_name:"Shaver 24",machine_type:"Cylinder Mower",rank:.97},
+  {model_id:"demo-atco-royale",manufacturer_name:"Atco",model_name:"Royale 24",variant_id:"demo-atco-royale-ic",variant_name:"Royale 24 I/C - F016310542",machine_type:"Cylinder Mower",rank:.96}
+];
 const state={client:null,user:null,org:null,garage:null,machines:[],selected:null,specs:[],serviceDue:[],serviceRecords:[],hoursLog:[],catalogueResults:[],loading:false,error:"",pendingPlateFile:null,demo:localStorage.getItem(DEMO_KEY)==="true"};
 
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -73,7 +78,9 @@ async function search(q){
   try{
     if(state.demo)state.catalogueResults=demoCatalogue.filter(x=>[x.manufacturer_name,x.model_name,x.variant_name].some(v=>v.toLowerCase().includes(q.toLowerCase())));
     else{const {data,error}=await state.client.schema("catalogue").rpc("search_machines",{search_text:q.trim(),result_limit:12});if(error)throw error;state.catalogueResults=data||[]}
-    box.innerHTML=state.catalogueResults.length?state.catalogueResults.map(r=>"<button class='result' data-action='select' data-id='"+esc(r.variant_id)+"'><div><div class='result-name'>"+esc(r.manufacturer_name)+" "+esc(r.model_name)+"</div><div class='result-meta'>"+esc(r.variant_name||"Model")+" · "+esc(r.machine_type||"Machine")+"</div></div><span class='arrow'>›</span></button>").join(""):"<p class='tiny'>No catalogue matches.</p>";
+    box.innerHTML=state.catalogueResults.length
+      ?state.catalogueResults.map(r=>"<button class='result' data-action='select' data-id='"+esc(r.variant_id)+"'><div><div class='result-name'>"+esc(r.manufacturer_name)+" "+esc(r.model_name)+"</div><div class='result-meta'>"+esc(r.variant_name||"Model")+" · "+esc(r.machine_type||"Machine")+"</div></div><span class='arrow'>›</span></button>").join("")
+      :"<div class='empty-mini'><div class='tiny'><b>Nothing found in the catalogue.</b></div><div class='tiny' style='margin-top:5px'>If the machine is sitting in front of you, scan its model plate and REELMOW will identify the text so we can search again.</div><button class='btn secondary small' style='margin-top:12px' data-action='unknown-machine'>Scan model plate</button></div>";
   }catch(e){box.innerHTML="<div class='error'>"+esc(e.message||"Search failed")+"</div>"}finally{state.loading=false}
 }
 function shell(c){
@@ -267,9 +274,28 @@ async function saveService(e){
   }catch(x){toast(x.message||"Could not save service record")}
 }
 function addModal(){
-  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Add machine</div><h2>Find it in the catalogue.</h2><p class='tiny'>Search manufacturer, model or variant.</p></div><button class='close' data-action='close'>×</button></div><div class='search-wrap'><span class='search-icon'>⌕</span><input id='q' class='search' placeholder='Search manufacturer or model…'></div><div id='results' class='result-list'><p class='tiny'>Try <b>LF3800</b>.</p></div></div></div>");
-  const q=document.querySelector("#q");let t;q.addEventListener("input",()=>{clearTimeout(t);t=setTimeout(()=>search(q.value),220)});q.focus()
+  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Add machine</div><h2>Find it in the catalogue.</h2><p class='tiny'>Search manufacturer, model or variant.</p></div><button class='close' data-action='close'>×</button></div><div class='search-wrap'><span class='search-icon'>⌕</span><input id='q' class='search' placeholder='Search manufacturer or model…'></div><div class='quick-searches'><button class='chip' data-search='LF3800'>Jacobsen LF3800</button><button class='chip' data-search='SC610'>Protea SC610</button><button class='chip' data-search='Shaver 24'>Allett Shaver 24</button><button class='chip' data-search='Royale 24'>ATCO Royale 24</button></div><div id='results' class='result-list'><p class='tiny'>Start typing, or choose a machine above.</p></div><div class='catalogue-help'><b>Can’t find your machine?</b><span>Scan the model plate and use the result to search the catalogue.</span><button class='btn secondary small' data-action='unknown-machine'>Scan plate</button></div></div></div>");
+  const q=document.querySelector("#q");let t;q.addEventListener("input",()=>{clearTimeout(t);t=setTimeout(()=>search(q.value),220)});
+  document.querySelectorAll("[data-search]").forEach(b=>b.addEventListener("click",()=>{q.value=b.dataset.search;search(q.value)}));
+  q.focus()
 }
+function unknownMachineModal(){
+  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Catalogue assistant</div><h2>Scan the model plate.</h2><p class='tiny'>REELMOW reads visible manufacturer, model and serial text. You remain in control before a machine is added.</p></div><button class='close' data-action='close'>×</button></div><div class='field'><label>Model / rating plate photo</label><input class='input' id='unknown-plate' type='file' accept='image/*' capture='environment'></div><div id='unknown-result' class='empty-mini'><div class='tiny'>Take a clear, close photo of the plate in good light.</div></div><div class='catalogue-help' style='margin-top:14px'><b>Nothing readable?</b><span>You can return to search and enter the manufacturer or model manually.</span><button class='btn secondary small' data-action='close'>Back to search</button></div></div></div>");
+  document.querySelector("#unknown-plate").addEventListener("change",async e=>{
+    const file=e.target.files?.[0];if(!file)return;
+    const box=document.querySelector("#unknown-result");box.innerHTML="<div class='loading' style='padding:22px 5px'><div class='spinner'></div>Reading the plate…</div>";
+    if(state.demo){box.innerHTML="<div class='note'><b>Demo scan:</b> Try searching Protea SC610, Allett Shaver 24 or ATCO Royale 24 in the catalogue.</div>";return}
+    try{
+      const data=await imageDataUrl(file);
+      const {data:result,error}=await state.client.functions.invoke("identify-machine",{body:{image_data_url:data}});
+      if(error)throw error;if(result?.error)throw new Error(result.error);
+      const query=[result.manufacturer,result.model,result.variant].filter(Boolean).join(" ").trim();
+      const confidence=Math.round(Number(result.confidence||0)*100);
+      box.innerHTML="<div class='note'><b>Plate read:</b> "+esc(query||"No model identified")+"<br>Confidence "+confidence+"%"+(result.serial_number?" · Serial "+esc(result.serial_number):"")+"</div>"+(query?"<button class='btn' style='width:100%;margin-top:10px' data-action='search-identified' data-query='"+esc(query)+"'>Search catalogue</button>":"");
+    }catch(x){box.innerHTML="<div class='error'>"+esc(x.message||"Plate scan failed")+"</div>"}
+  })
+}
+
 function editModal(){
   const m=state.selected;
   modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Machine details</div><h2>Edit machine.</h2><p class='tiny'>Update the physical asset record. Catalogue identity remains fixed.</p></div><button class='close' data-action='close'>×</button></div><form id='edit-machine'><div class='field'><label>Nickname</label><input class='input' id='edit-nickname' value='"+esc(m.nickname||"")+"' maxlength='80'></div><div class='field'><label>Asset number</label><input class='input' id='edit-asset' value='"+esc(m.asset_number||"")+"' maxlength='80'></div><div class='field'><label>Purchase date</label><input class='input' id='edit-date' type='date' value='"+esc(m.purchase_date||"")+"' ></div><div class='field'><label>Status</label><select class='input' id='edit-status'><option value='ready'>Ready</option><option value='service_due'>Service due</option><option value='in_service'>In service</option><option value='out_of_service'>Out of service</option><option value='retired'>Retired</option></select></div><div class='field'><label>Notes</label><textarea class='input' id='edit-notes' rows='4' maxlength='2000'>"+esc(m.notes||"")+"</textarea></div><button class='btn' style='width:100%'>Save changes</button></form></div></div>");
