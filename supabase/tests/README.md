@@ -8,6 +8,9 @@ The database test suite is intentionally separate from application/UI tests.
 - database/002_security.sql — RLS, function privileges and security posture
 - database/003_catalogue.sql — seeded catalogue and search contract
 - database/004_service_integrity.sql — service, hours, document and photo integrity
+- database/005_tenant_isolation.sql — tenant policy structure
+- database/006_tenant_isolation_behavior.sql — behavioural tenant isolation
+- database/007_service_workflow.sql — hours → due → service lifecycle
 
 ## Local execution
 
