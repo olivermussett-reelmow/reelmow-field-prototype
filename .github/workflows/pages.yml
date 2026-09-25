@@ -50,7 +50,20 @@ jobs:
           const js = 'window.REELMOW_CONFIG = ' + JSON.stringify({ url, key }) + ';\\n';
           fs.writeFileSync('reelmow.config.js', js, 'utf8');
           NODE
-          echo "Runtime configuration generated for the Pages artifact."
+          test -n "$url"
+          test -n "$key"
+          test -s reelmow.config.js
+          node - <<'NODE'
+          const fs = require('fs');
+          const text = fs.readFileSync('reelmow.config.js','utf8');
+          if (!text.includes('window.REELMOW_CONFIG')) throw new Error('Runtime config was not generated correctly');
+          const match = text.match(/window\\.REELMOW_CONFIG = (.*);/);
+          if (!match) throw new Error('Runtime config payload missing');
+          const cfg = JSON.parse(match[1]);
+          if (!cfg.url || !cfg.key) throw new Error('Supabase runtime configuration is empty');
+          console.log('Runtime configuration verified for artifact:', cfg.url);
+          NODE
+          echo "Runtime configuration generated and verified for the Pages artifact."
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
