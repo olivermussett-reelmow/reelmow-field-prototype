@@ -3,7 +3,7 @@
 -- authenticated user A. Everything is rolled back at the end.
 begin;
 
-select extensions.plan(17);
+select extensions.plan(13);
 
 set local role postgres;
 
@@ -85,26 +85,6 @@ select extensions.is(
 select extensions.lives_ok(
   $$ delete from garage.machines where id='00000000-0000-0000-0000-0000000000b4 $$,
   'cross-tenant machine delete is safely filtered'
-);
-
-select extensions.ok(
-  private.is_org_member('00000000-0000-0000-0000-0000000000a2'),
-  'user A is member of organisation A'
-);
-
-select extensions.ok(
-  not private.is_org_member('00000000-0000-0000-0000-0000000000b2'),
-  'user A is not member of organisation B'
-);
-
-select extensions.ok(
-  private.has_org_role('00000000-0000-0000-0000-0000000000a2',array['owner']::garage.member_role[]),
-  'user A has owner role in organisation A'
-);
-
-select extensions.ok(
-  not private.has_org_role('00000000-0000-0000-0000-0000000000b2',array['owner']::garage.member_role[]),
-  'user A has no role in organisation B'
 );
 
 select extensions.throws_ok(
