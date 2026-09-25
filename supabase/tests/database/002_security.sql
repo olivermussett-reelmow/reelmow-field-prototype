@@ -1,7 +1,7 @@
 begin;
 select extensions.plan(13);
 select extensions.ok((select count(*)=3 from pg_proc where pronamespace='garage'::regnamespace and proname in ('create_organization','record_machine_hours','record_machine_service') and prosecdef),'customer Garage RPC wrappers use SECURITY DEFINER');
-select extensions.ok((select count(*)=3 from pg_proc where pronamespace='garage'::regnamespace and proname in ('create_organization','record_machine_hours','record_machine_service') and proconfig @> array['search_path=']),'Garage RPC wrappers pin search_path');
+select extensions.ok((select count(*)=3 from pg_proc where pronamespace='garage'::regnamespace and proname in ('create_organization','record_machine_hours','record_machine_service') and proconfig @> array['search_path=""']),'Garage RPC wrappers pin search_path');
 select extensions.ok(not exists(select 1 from pg_proc where pronamespace='catalogue'::regnamespace and proname='search_machines' and prosecdef),'catalogue search is SECURITY INVOKER');
 select extensions.ok(not exists(select 1 from pg_proc where pronamespace='private'::regnamespace and proname in ('create_organization','record_machine_hours','record_machine_service') and has_function_privilege('authenticated',oid,'execute')),'private write implementations are not callable by authenticated users');
 select extensions.ok(not has_function_privilege('anon','catalogue.search_machines(text,integer)'::regprocedure,'execute'),'anonymous users cannot execute catalogue search');
