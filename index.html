@@ -11,10 +11,36 @@
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" href="./icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="./styles.css">
+<style>
+#app{min-height:100vh}
+.startup{min-height:100vh;display:grid;place-items:center;padding:32px;font-family:system-ui,-apple-system,sans-serif;color:#18352a}
+.startup-card{max-width:520px;width:100%;padding:32px;border:1px solid #dce6e0;border-radius:24px;background:#fff;box-shadow:0 20px 60px rgba(11,51,36,.08)}
+.startup-mark{font-weight:800;letter-spacing:.08em;font-size:18px}.startup-mark span{color:#8fcf36}
+.startup-title{font-size:32px;margin:18px 0 8px}.startup-copy{color:#61746b;line-height:1.6}
+.startup-error{display:none;margin-top:18px;padding:14px;border-radius:12px;background:#fff2f0;color:#8b2e24;white-space:pre-wrap;font:13px/1.5 ui-monospace,SFMono-Regular,monospace}
+</style>
 </head>
 <body>
-<div id="app"></div>
-<script type="module" src="./app.js"></script>
-<script>if("serviceWorker" in navigator)window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js"))</script>
+<div id="app">
+  <div class="startup">
+    <div class="startup-card">
+      <div class="startup-mark">REEL<span>MOW</span></div>
+      <h1 class="startup-title">Opening Garage…</h1>
+      <p class="startup-copy">Loading your machinery workspace.</p>
+      <div id="startup-error" class="startup-error"></div>
+    </div>
+  </div>
+</div>
+<script>
+window.addEventListener("error",function(e){
+  var box=document.getElementById("startup-error");
+  if(box){box.style.display="block";box.textContent="REELMOW could not start.\n"+(e.message||"JavaScript error")+"\n"+(e.filename||"")+" "+(e.lineno||"");}
+});
+window.addEventListener("unhandledrejection",function(e){
+  var box=document.getElementById("startup-error");
+  if(box){box.style.display="block";box.textContent="REELMOW could not start.\n"+(e.reason?.message||e.reason||"Startup error");}
+});
+</script>
+<script type="module" src="./app.js?v=20260925-2"></script>
 </body>
 </html>
