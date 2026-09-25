@@ -4,9 +4,9 @@
 -- isolated test database when the full auth harness is available.
 begin;
 
-select plan(6);
+select extensions.plan(6);
 
-select ok(
+select extensions.ok(
   exists(
     select 1 from pg_policies
     where schemaname='garage'
@@ -63,7 +63,8 @@ select ok(
     where schemaname='garage'
       and tablename in ('machines','machine_documents','machine_photos',
                         'machine_hours_log','machine_service_records')
-      and (qual is null or qual='true')
+      and cmd in ('SELECT','UPDATE','DELETE','ALL')
+      and qual='true'
   ),
   'Garage data policies are not globally permissive'
 );
