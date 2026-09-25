@@ -1,5 +1,11 @@
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+let createClient = null;
+async function loadSupabaseClient(){
+  if(createClient) return createClient;
+  const mod = await import("https://esm.sh/@supabase/supabase-js@2");
+  createClient = mod.createClient;
+  return createClient;
+}
 
 const CONFIG_KEY="reelmow.connection.v1", DEMO_KEY="reelmow.demo.v1";
 const app=document.querySelector("#app");
@@ -30,7 +36,8 @@ async function imageDataUrl(file,maxSize=1600,quality=.82){
 async function connect(){
   if(state.demo)return;
   const c=cfg();if(!c?.url||!c?.key)return;
-  state.client=createClient(c.url,c.key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+  const makeClient=await loadSupabaseClient();
+  state.client=makeClient(c.url,c.key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
   const {data,error}=await state.client.auth.getSession();if(error)throw error;
   state.user=data.session?.user||null;
   state.client.auth.onAuthStateChange((_e,s)=>{state.user=s?.user||null;render()});
