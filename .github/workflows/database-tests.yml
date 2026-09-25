@@ -29,11 +29,16 @@ jobs:
         with:
           version: latest
 
+      - name: Report Supabase CLI
+        run: |
+          supabase --version
+          supabase migration list || true
+
       - name: Start local Supabase
         run: supabase start
 
       - name: Reset database from migrations
-        run: supabase db reset
+        run: supabase db reset --debug
 
       - name: Run database tests
         run: supabase test db
