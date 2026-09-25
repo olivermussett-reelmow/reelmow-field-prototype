@@ -28,6 +28,16 @@ insert into _reelmow_test_ids values (
   '00000000-0000-0000-0000-0000000000b4'
 );
 
+insert into auth.users (
+  id, aud, role, email, email_confirmed_at, created_at, updated_at,
+  is_sso_user, is_anonymous
+)
+select user_a,'authenticated','authenticated','reelmow-test-a@example.invalid',now(),now(),now(),false,false
+from _reelmow_test_ids
+union all
+select user_b,'authenticated','authenticated','reelmow-test-b@example.invalid',now(),now(),now(),false,false
+from _reelmow_test_ids;
+
 insert into garage.organizations(id,name,slug,created_by)
 select org_a,'REELMOW TEST A','reelmow-test-a',user_a from _reelmow_test_ids
 union all
