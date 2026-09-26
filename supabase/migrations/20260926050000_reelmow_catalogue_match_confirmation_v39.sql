@@ -50,13 +50,13 @@ as $$
       + case when i.model <> '' then greatest(0, extensions.similarity(lower(s.model_name),coalesce(model_text,'')))*0.08 else 0 end
       + case when i.man <> '' and position(i.man in lower(regexp_replace(s.manufacturer_name,'[^a-z0-9]+','','g'))) > 0 then 0.02 else 0 end
       + case when i.model <> '' and position(i.model in lower(regexp_replace(coalesce(s.variant_name,''),'[^a-z0-9]+','','g'))) > 0 then 0.03 else 0 end
-      + case when i.serial <> '' and s.serial_prefix is not null
-                  and left(i.serial,length(lower(regexp_replace(s.serial_prefix,'[^a-z0-9]+','','g'))))=lower(regexp_replace(s.serial_prefix,'[^a-z0-9]+','','g'))
+      + case when i.serial <> '' and v.serial_prefix is not null
+                  and left(i.serial,length(lower(regexp_replace(v.serial_prefix,'[^a-z0-9]+','','g'))))=lower(regexp_replace(v.serial_prefix,'[^a-z0-9]+','','g'))
              then 0.15 else 0 end
       + case when i.visible <> '' and i.model <> '' and position(lower(s.model_name) in i.visible)>0 then 0.06 else 0 end
       as raw_rank,
       i.*
-    from catalogue.machine_search s cross join input i
+    from catalogue.machine_search s join catalogue.machine_variants v on v.id=s.variant_id cross join input i
     where
       (i.model <> '' and (
         s.model_name ilike '%'||model_text||'%' or s.variant_name ilike '%'||model_text||'%'
@@ -65,8 +65,8 @@ as $$
       or (i.man <> '' and s.manufacturer_name ilike '%'||manufacturer_text||'%')
       or (i.fam <> '' and s.family_name ilike '%'||product_family_text||'%')
       or (i.variant <> '' and s.variant_name ilike '%'||variant_text||'%')
-      or (i.serial <> '' and s.serial_prefix is not null
-          and left(i.serial,length(lower(regexp_replace(s.serial_prefix,'[^a-z0-9]+','','g'))))=lower(regexp_replace(s.serial_prefix,'[^a-z0-9]+','','g')))
+      or (i.serial <> '' and v.serial_prefix is not null
+          and left(i.serial,length(lower(regexp_replace(v.serial_prefix,'[^a-z0-9]+','','g'))))=lower(regexp_replace(v.serial_prefix,'[^a-z0-9]+','','g')))
       or (i.visible <> '' and i.model <> '' and position(lower(s.model_name) in i.visible)>0)
   )
   select
@@ -164,3 +164,65 @@ $$;
 
 revoke execute on function garage.create_machine(uuid,uuid,uuid,text,text,text,date,numeric,date,date,text,text,text,text,numeric,numeric,text,text,text,text,bigint,jsonb) from public, anon;
 grant execute on function garage.create_machine(uuid,uuid,uuid,text,text,text,date,numeric,date,date,text,text,text,text,numeric,numeric,text,text,text,text,bigint,jsonb) to authenticated;
+
+
+create or replace function garage.update_machine_profile(
+  p_machine_id uuid,
+  p_serial_number text default null,
+  p_asset_number text default null,
+  p_nickname text default null,
+  p_purchase_date date default null,
+  p_purchase_price numeric default null,
+  p_ownership_type text default null,
+  p_ownership_name text default null,
+  p_warranty_start_date date default null,
+  p_warranty_end_date date default null,
+  p_warranty_provider text default null,
+  p_notes text default null
+)
+returns garage.machines
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare current_row garage.machines;
+begin
+  if auth.uid() is null then raise exception 'Authentication required'; end if;
+  select m.* into current_row
+  from garage.machines m
+  join garage.garages g on g.id=m.garage_id
+  where m.id=p_machine_id
+    and private.has_org_role(g.organization_id, array['owner'::garage.member_role,'admin'::garage.member_role,'manager'::garage.member_role,'operator'::garage.member_role]);
+  if current_row.id is null then raise exception 'Machine not found or permission denied'; end if;
+  if p_purchase_price is not null and p_purchase_price < 0 then raise exception 'Purchase price cannot be negative'; end if;
+  if p_warranty_start_date is not null and p_warranty_end_date is not null and p_warranty_end_date < p_warranty_start_date then
+    raise exception 'Warranty end cannot be before warranty start';
+  end if;
+  if p_serial_number is not null and exists (
+    select 1 from garage.machines m
+    where m.garage_id=current_row.garage_id
+      and m.id<>p_machine_id
+      and lower(m.serial_number)=lower(p_serial_number)
+  ) then raise exception 'A machine with this serial number is already in this Garage'; end if;
+
+  update garage.machines
+  set serial_number=nullif(p_serial_number,''),
+      asset_number=nullif(p_asset_number,''),
+      nickname=nullif(p_nickname,''),
+      purchase_date=p_purchase_date,
+      purchase_price=p_purchase_price,
+      ownership_type=nullif(p_ownership_type,''),
+      ownership_name=nullif(p_ownership_name,''),
+      warranty_start_date=p_warranty_start_date,
+      warranty_end_date=p_warranty_end_date,
+      warranty_provider=nullif(p_warranty_provider,''),
+      notes=nullif(p_notes,''),
+      updated_at=now()
+  where id=p_machine_id
+  returning * into current_row;
+  return current_row;
+end;
+$$;
+
+revoke execute on function garage.update_machine_profile(uuid,text,text,text,date,numeric,text,text,date,date,text,text) from public, anon;
+grant execute on function garage.update_machine_profile(uuid,text,text,text,date,numeric,text,text,date,date,text,text) to authenticated;
