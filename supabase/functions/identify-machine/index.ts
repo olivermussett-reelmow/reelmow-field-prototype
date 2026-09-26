@@ -17,11 +17,11 @@ Deno.serve(async req => {
     if(image_data_url.length>8_000_000) throw new Error("Plate image is too large. Use a clear, close photo under 6 MB.");
 
     const response=await openai.responses.create({
-      model:"gpt-5.5",
+      model:"gpt-5.6-luna",
       input:[{
         role:"user",
         content:[
-          {type:"input_text",text:"Identify the machinery model/serial plate in this image for REELMOW. Read only visible text. Never guess missing characters. Return likely manufacturer, product family, model, variant, serial number and confidence. Confidence must reflect only what is visibly supported. If uncertain, use null and explain the uncertainty."},
+          {type:"input_text",text:"Identify the machinery model or serial plate in this image for REELMOW. Read only text that is visibly present. Never guess missing characters. Prioritise exact manufacturer, product family, model, variant and serial text. Return likely manufacturer, product family, model, variant, serial number, all visible text and confidence. Confidence measures the quality of the plate reading only; it is not catalogue-match confidence. If a field is uncertain, return null and explain why. Do not invent specifications or identify a model from visual appearance alone."},
           {type:"input_image",image_url:image_data_url}
         ]
       }],

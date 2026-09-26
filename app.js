@@ -593,20 +593,22 @@ function addModal(){
   q.focus()
 }
 function unknownMachineModal(){
-  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Catalogue assistant</div><h2>Scan the model plate.</h2><p class='tiny'>REELMOW reads visible manufacturer, model and serial text. You remain in control before a machine is added.</p></div><button class='close' data-action='close'>×</button></div><div class='field'><label>Model / rating plate photo</label><input class='input' id='unknown-plate' type='file' accept='image/*' capture='environment'></div><div id='unknown-result' class='empty-mini'><div class='tiny'>Take a clear, close photo of the plate in good light.</div></div><div class='catalogue-help' style='margin-top:14px'><b>Nothing readable?</b><span>You can return to search and enter the manufacturer or model manually.</span><button class='btn secondary small' data-action='close'>Back to search</button></div></div></div>");
+  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Catalogue assistant</div><h2>Scan the machine plate.</h2><p class='tiny'>REELMOW reads the plate with AI, then matches the reading against the verified REELMOW catalogue. You confirm the machine before it is added.</p></div><button class='close' data-action='close'>×</button></div><div class='field'><label>Model / serial plate photo</label><input class='input' id='unknown-plate' type='file' accept='image/*' capture='environment'></div><div id='unknown-result' class='empty-mini'><div class='tiny'>Take a clear, close photo of the plate in good light.</div></div><div class='catalogue-help' style='margin-top:14px'><b>Nothing readable?</b><span>You can return to search and enter the manufacturer or model manually.</span><button class='btn secondary small' data-action='close'>Back to search</button></div></div></div>");
   document.querySelector("#unknown-plate").addEventListener("change",async e=>{
     const file=e.target.files?.[0];if(!file)return;
     state.pendingIdentification=null;
-    const box=document.querySelector("#unknown-result");box.innerHTML="<div class='loading' style='padding:22px 5px'><div class='spinner'></div>Reading the plate…</div>";
-    if(state.demo){box.innerHTML="<div class='note'><b>Demo scan:</b> Try searching Protea SC610, Allett Shaver 24 or ATCO Royale 24 in the catalogue.</div>";return}
+    const box=document.querySelector("#unknown-result");box.innerHTML="<div class='loading' style='padding:22px 5px'><div class='spinner'></div>Reading plate and checking catalogue…</div>";
+    if(state.demo){box.innerHTML="<div class='note'><b>Demo scan:</b> In live mode REELMOW reads the plate, matches it against the catalogue and asks you to confirm the suggested variant.</div>";return}
     try{
       const data=await imageDataUrl(file);
       const {data:result,error}=await state.client.functions.invoke("identify-machine",{body:{image_data_url:data}});
       if(error)throw error;if(result?.error)throw new Error(result.error);
-      const query=[result.manufacturer,result.model,result.variant].filter(Boolean).join(" ").trim();
-      state.pendingIdentification={serial_number:result.serial_number||null,manufacturer:result.manufacturer||null,model:result.model||null,variant:result.variant||null,confidence:Number(result.confidence||0),plateFile:file};
+      const candidates=await matchPlateIdentification(result);
+      state.pendingIdentification={serial_number:result.serial_number||null,manufacturer:result.manufacturer||null,product_family:result.product_family||null,model:result.model||null,variant:result.variant||null,visible_text:result.visible_text||"",confidence:Number(result.confidence||0),uncertainty:result.uncertainty||"",plateFile:file,candidates};
       const confidence=Math.round(Number(result.confidence||0)*100);
-      box.innerHTML="<div class='note'><b>Plate read:</b> "+esc(query||"No model identified")+"<br>Confidence "+confidence+"%"+(result.serial_number?" · Serial "+esc(result.serial_number):"")+"</div>"+(query?"<button class='btn' style='width:100%;margin-top:10px' data-action='search-identified' data-query='"+esc(query)+"'>Search catalogue</button>":"");
+      const read="<div class='note'><b>AI plate reading</b><br>"+esc([result.manufacturer,result.product_family,result.model,result.variant].filter(Boolean).join(" · ")||"No model identified")+"<br>Serial "+esc(result.serial_number||"Not read")+" · AI confidence "+confidence+"%"+(result.uncertainty?"<br>"+esc(result.uncertainty):"")+"</div>";
+      const list=candidates.length?candidates.map((x,i)=>identificationCard(x,i)).join(""):"<div class='empty-mini'><b>No verified catalogue match.</b><div class='tiny' style='margin-top:5px'>Check the plate reading and search the catalogue manually. Do not add an unverified variant.</div></div>";
+      box.innerHTML=read+"<div class='eyebrow' style='margin-top:15px'>Catalogue suggestions</div><div class='result-list' style='margin-top:7px'>"+list+"</div>";
     }catch(x){box.innerHTML="<div class='error'>"+esc(x.message||"Plate scan failed")+"</div>"}
   })
 }
@@ -692,7 +694,12 @@ function editModal(){
     try{
       if(state.demo)Object.assign(m,patch);
       else{
-        const {error}=await state.client.schema("garage").from("machines").update(patch).eq("id",m.id);
+        const {error}=await state.client.schema("garage").rpc("update_machine_profile",{
+          p_machine_id:m.id,p_serial_number:patch.serial_number,p_asset_number:patch.asset_number,p_nickname:patch.nickname,
+          p_purchase_date:patch.purchase_date,p_purchase_price:patch.purchase_price,p_ownership_type:patch.ownership_type,
+          p_ownership_name:patch.ownership_name,p_warranty_start_date:patch.warranty_start_date,p_warranty_end_date:patch.warranty_end_date,
+          p_warranty_provider:patch.warranty_provider,p_notes:patch.notes
+        });
         if(error)throw error;
         await loadMachines();state.selected=state.machines.find(x=>x.id===m.id)||m;
       }
@@ -701,9 +708,11 @@ function editModal(){
   });
 }
 function machineModal(r){
-  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Physical machine</div><h2>"+esc(r.manufacturer_name)+" "+esc(r.model_name)+"</h2><p class='tiny'>"+esc(r.variant_name||"Variant")+" · REELMOW catalogue</p></div><button class='close' data-action='close'>×</button></div><form id='machine-form'><div class='note' style='margin-bottom:14px'><b>Scan the machine plate</b><br>Take a clear photo and REELMOW will read the visible model and serial text. You still confirm the result before adding the machine.</div><div class='field'><label>Plate photo</label><input class='input' id='plate-photo' type='file' accept='image/*' capture='environment'></div><div id='plate-result'></div><div class='field'><label>Serial number</label><input class='input' id='serial'></div><div class='field'><label>Asset number</label><input class='input' id='asset'></div><div class='field'><label>Nickname</label><input class='input' id='nickname' placeholder='e.g. Main Outfield Mower'></div><div class='grid two'><div class='field'><label>Purchase date</label><input class='input' id='date' type='date'></div><div class='field'><label>Purchase price</label><input class='input' id='purchase-price' type='number' min='0' step='.01' placeholder='0.00'></div></div><div class='grid two'><div class='field'><label>Engine hours</label><input class='input' id='hours' type='number' min='0' step='.1'></div><div class='field'><label>Reel hours</label><input class='input' id='reel' type='number' min='0' step='.1'></div></div><div class='field'><label>Ownership</label><select class='input' id='ownership-type'><option value=''>Not specified</option><option value='owned'>Owned</option><option value='leased'>Leased</option><option value='hired'>Hired</option><option value='loaned'>Loaned</option><option value='other'>Other</option></select></div><div class='field'><label>Owner / supplier</label><input class='input' id='ownership-name'></div><div class='grid two'><div class='field'><label>Warranty start</label><input class='input' id='warranty-start' type='date'></div><div class='field'><label>Warranty end</label><input class='input' id='warranty-end' type='date'></div></div><div class='field'><label>Warranty provider</label><input class='input' id='warranty-provider' placeholder='Dealer / manufacturer'></div><div class='field'><label>Notes</label><textarea class='input' id='machine-notes' rows='3'></textarea></div><div class='note'>This physical asset will be linked to the verified catalogue variant.</div><button class='btn' style='width:100%;margin-top:14px'>Add to Garage</button></form></div></div>");
-  document.querySelector("#machine-form").addEventListener("submit",e=>saveMachine(e,r));
   const pending=state.pendingIdentification;
+  state.pendingCatalogueVariantId=r.variant_id;
+  const aiReview=pending?"<div class='note' style='margin-bottom:14px'><b>REELMOW identification</b><br>"+esc([pending.manufacturer,pending.product_family,pending.model,pending.variant].filter(Boolean).join(" · ")||"Catalogue match")+" · Serial "+esc(pending.serial_number||"Not read")+"<br>Review the verified catalogue match below before adding the machine.</div>":"<div class='note' style='margin-bottom:14px'><b>Scan the machine plate</b><br>REELMOW reads the visible model and serial text, then checks it against the catalogue. You confirm the result before adding the machine.</div>";
+  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Physical machine</div><h2>"+esc(r.manufacturer_name)+" "+esc(r.model_name)+"</h2><p class='tiny'>"+esc(r.variant_name||"Variant")+" · REELMOW catalogue</p></div><button class='close' data-action='close'>×</button></div><form id='machine-form'>"+aiReview+"<div class='field'><label>Plate photo</label><input class='input' id='plate-photo' type='file' accept='image/*' capture='environment'></div><div id='plate-result'></div><div class='field'><label>Serial number</label><input class='input' id='serial'></div><div class='field'><label>Asset number</label><input class='input' id='asset'></div><div class='field'><label>Nickname</label><input class='input' id='nickname' placeholder='e.g. Main Outfield Mower'></div><div class='grid two'><div class='field'><label>Purchase date</label><input class='input' id='date' type='date'></div><div class='field'><label>Purchase price</label><input class='input' id='purchase-price' type='number' min='0' step='.01' placeholder='0.00'></div></div><div class='grid two'><div class='field'><label>Engine hours</label><input class='input' id='hours' type='number' min='0' step='.1'></div><div class='field'><label>Reel hours</label><input class='input' id='reel' type='number' min='0' step='.1'></div></div><div class='field'><label>Ownership</label><select class='input' id='ownership-type'><option value=''>Not specified</option><option value='owned'>Owned</option><option value='leased'>Leased</option><option value='hired'>Hired</option><option value='loaned'>Loaned</option><option value='other'>Other</option></select></div><div class='field'><label>Owner / supplier</label><input class='input' id='ownership-name'></div><div class='grid two'><div class='field'><label>Warranty start</label><input class='input' id='warranty-start' type='date'></div><div class='field'><label>Warranty end</label><input class='input' id='warranty-end' type='date'></div></div><div class='field'><label>Warranty provider</label><input class='input' id='warranty-provider' placeholder='Dealer / manufacturer'></div><div class='field'><label>Notes</label><textarea class='input' id='machine-notes' rows='3'></textarea></div><div class='note'>This physical asset will be linked to the verified catalogue variant.</div><button class='btn' style='width:100%;margin-top:14px'>Add to Garage</button></form></div></div>");
+  document.querySelector("#machine-form").addEventListener("submit",e=>saveMachine(e,r));
   if(pending?.serial_number){document.querySelector("#serial").value=pending.serial_number;state.pendingPlateFile=pending.plateFile||null}
   document.querySelector("#plate-photo").addEventListener("change",e=>identifyPlate(e.target.files?.[0]))
 }
@@ -727,31 +736,35 @@ async function saveMachine(e,r){
   e.preventDefault();if(!canOperate())return toast("Your role is read-only.");
   const serial=val("#serial"),asset=val("#asset"),nickname=val("#nickname"),purchaseDate=val("#date"),purchasePrice=num("#purchase-price"),warrantyStart=val("#warranty-start"),warrantyEnd=val("#warranty-end"),warrantyProvider=val("#warranty-provider"),ownershipType=val("#ownership-type")||null,ownershipName=val("#ownership-name"),notes=val("#machine-notes"),engineHours=num("#hours"),reelHours=num("#reel");
   if(engineHours!=null&&engineHours<0||reelHours!=null&&reelHours<0){toast("Hours cannot be negative");return}
-  const p={garage_id:state.garage.id,machine_variant_id:r.variant_id,serial_number:serial||null,asset_number:asset||null,nickname:nickname||null,purchase_date:purchaseDate||null,purchase_price:purchasePrice,warranty_start_date:warrantyStart||null,warranty_end_date:warrantyEnd||null,warranty_provider:warrantyProvider||null,ownership_type:ownershipType,ownership_name:ownershipName||null,notes:notes||null,current_engine_hours:engineHours,current_reel_hours:reelHours,created_by:state.user?.id||null};
-  if(state.demo){state.machines.unshift({...p,id:crypto.randomUUID(),status:"ready",variant:{variant_name:r.variant_name},model:{model_name:r.model_name},manufacturer:{name:r.manufacturer_name}});closeModal();toast("Machine added to Garage");return render()}
+  if(state.demo){state.machines.unshift({id:crypto.randomUUID(),garage_id:state.garage.id,machine_variant_id:r.variant_id,serial_number:serial||null,asset_number:asset||null,nickname:nickname||null,purchase_date:purchaseDate||null,purchase_price:purchasePrice,current_engine_hours:engineHours,current_reel_hours:reelHours,status:"ready",variant:{variant_name:r.variant_name},model:{model_name:r.model_name},manufacturer:{name:r.manufacturer_name}});closeModal();toast("Machine added to Garage");return render()}
+  let uploadedPath=null;
   try{
-    if(serial){
-      const {data:duplicate,error:de}=await state.client.schema("garage").from("machines").select("id").eq("garage_id",state.garage.id).ilike("serial_number",serial).limit(1);
-      if(de)throw de;
-      if(duplicate?.length){throw new Error("A machine with this serial number is already in this Garage.");}
+    const machineId=crypto.randomUUID(),file=state.pendingPlateFile;
+    if(file){
+      uploadedPath="org/"+state.org.id+"/machines/"+machineId+"/"+Date.now()+"-"+crypto.randomUUID()+".jpg";
+      const resized=await imageDataUrl(file,1800,.84),blob=await (await fetch(resized)).blob();
+      const up=await state.client.storage.from("reelmow-garage-private").upload(uploadedPath,blob,{contentType:"image/jpeg",upsert:false});
+      if(up.error)throw new Error("Plate evidence could not be uploaded. The machine was not added.");
     }
-    const {data:created,error}=await state.client.schema("garage").from("machines").insert(p).select("id").single();
+    const {error}=await state.client.schema("garage").rpc("create_machine",{
+      p_machine_id:machineId,p_garage_id:state.garage.id,p_machine_variant_id:r.variant_id,
+      p_serial_number:serial||null,p_asset_number:asset||null,p_nickname:nickname||null,p_purchase_date:purchaseDate||null,
+      p_purchase_price:purchasePrice,p_warranty_start_date:warrantyStart||null,p_warranty_end_date:warrantyEnd||null,
+      p_warranty_provider:warrantyProvider||null,p_ownership_type:ownershipType,p_ownership_name:ownershipName||null,
+      p_notes:notes||null,p_current_engine_hours:engineHours,p_current_reel_hours:reelHours,
+      p_photo_bucket:uploadedPath?"reelmow-garage-private":null,p_photo_path:uploadedPath,p_photo_caption:"Machine model / serial plate",
+      p_photo_mime_type:file?.type||"image/jpeg",p_photo_file_size:file?.size||null,
+      p_photo_metadata:{source:"plate_scan",ai_confidence:state.pendingIdentification?.confidence??null,ai_reading:{
+        manufacturer:state.pendingIdentification?.manufacturer||null,model:state.pendingIdentification?.model||null,
+        variant:state.pendingIdentification?.variant||null,serial_number:state.pendingIdentification?.serial_number||null
+      }}
+    });
     if(error)throw error;
-    if(state.pendingPlateFile){
-      const file=state.pendingPlateFile,bucket="reelmow-garage-private",path="org/"+state.org.id+"/machines/"+created.id+"/"+Date.now()+"-"+crypto.randomUUID()+".jpg";
-      const resized=await imageDataUrl(file,1800,.84);
-      const blob=await (await fetch(resized)).blob();
-      const up=await state.client.storage.from(bucket).upload(path,blob,{contentType:"image/jpeg",upsert:false});
-      if(!up.error){
-        const {error:pe}=await state.client.schema("garage").from("machine_photos").insert({
-          machine_id:created.id,storage_bucket:bucket,storage_path:path,caption:"Machine model / serial plate",photo_type:"serial_plate",
-          mime_type:file.type||"image/jpeg",file_size_bytes:file.size,captured_at:new Date().toISOString(),created_by:state.user?.id||null
-        });
-        if(pe)toast("Machine added, but plate evidence could not be saved.");
-      }else toast("Machine added, but plate photo upload failed.");
-    }
-    state.pendingPlateFile=null;closeModal();await loadMachines();toast("Machine added to Garage");render()
-  }catch(x){toast(x.message||"Could not add machine")}
+    state.pendingPlateFile=null;state.pendingIdentification=null;closeModal();await loadMachines();toast("Machine added to Garage");render()
+  }catch(x){
+    if(uploadedPath)await state.client.storage.from("reelmow-garage-private").remove([uploadedPath]).catch(()=>{});
+    toast(x.message||"Could not add machine")
+  }
 }
 async function createOrg(e){
   e.preventDefault();try{const {data,error}=await state.client.schema("garage").rpc("create_organization",{org_name:val("#org-name"),org_slug:slug(val("#org-name"))+"-"+Math.random().toString(36).slice(2,7)});if(error)throw error;const {error:g}=await state.client.schema("garage").from("garages").insert({organization_id:data,name:val("#garage-name"),location_name:val("#garage-location")});if(g)throw g;await loadWorkspace();render()}catch(x){state.error=x.message;render()}
@@ -793,11 +806,6 @@ document.addEventListener("click",e=>{
     if(action==="hours")return hoursModal();if(action==="service")return serviceModal();if(action==="fault")return faultModal();if(action==="mow")return startMow(state.selected.id);
     return;
   }
-  if(x==="quick-machine"){
-    state.selected=state.machines.find(v=>v.id===a.dataset.id)||null;
-    const action=state.quickAction;state.quickAction=null;closeModal();
-    if(action==="hours")return hoursModal();if(action==="service")return serviceModal();return faultModal();
-  }
   if(x==="resolve-fault")return resolveFaultModal(a.dataset.id);
   if(x==="ack-fault")return acknowledgeFault(a.dataset.id);
   if(x==="status")return statusTransitionModal();
@@ -807,6 +815,11 @@ document.addEventListener("click",e=>{
   if(x==="close")return closeModal();
   if(x==="add"){state.catalogueResults=[];return addModal()}
   if(x==="select"){const r=state.catalogueResults.find(v=>v.variant_id===a.dataset.id);if(r)machineModal(r);return}
+  if(x==="accept-identified"){
+    const pending=state.pendingIdentification,candidates=pending?.candidates||[],r=candidates[Number(a.dataset.index)];
+    if(!r)return;
+    closeModal();state.pendingIdentification=pending;machineModal(r);return;
+  }
   if(x==="open"){state.selected=state.machines.find(v=>v.id===a.dataset.id)||null;state.specs=[];return render()}
   if(x==="back"||x==="home")return setView("garage");
   if(x==="edit")return editModal();
