@@ -88,7 +88,6 @@ async function connect(){
 async function boot(){
   try{await connect();if(state.demo){loadDemo();return render()}if(!connected()||!state.user)return render();await loadWorkspace();render();syncOutbox()}
   catch(e){state.error=e.message||"Unable to connect";render()}
-  catch(e){state.error=e.message||"Unable to connect";render()}
 }
 async function loadWorkspace(){
   const {data:m,error:me}=await state.client.schema("garage").from("memberships").select("organization_id,role").eq("user_id",state.user.id);if(me)throw me;
