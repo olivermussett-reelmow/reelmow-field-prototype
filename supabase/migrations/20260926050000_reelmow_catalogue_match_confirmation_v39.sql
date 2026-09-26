@@ -73,10 +73,10 @@ as $$
     model_id,manufacturer_name,family_name,model_name,variant_id,variant_name,variant_code,machine_type,
     least(1.0,raw_rank)::real as rank,
     jsonb_build_object(
-      'manufacturer_exact', (raw_rank >= 0.18 and i.man <> '' and lower(regexp_replace(manufacturer_name,'[^a-z0-9]+','','g'))=i.man),
-      'model_exact', (i.model <> '' and lower(regexp_replace(model_name,'[^a-z0-9]+','','g'))=i.model),
-      'variant_exact', (i.variant <> '' and lower(regexp_replace(coalesce(variant_name,''),'[^a-z0-9]+','','g'))=i.variant),
-      'serial_prefix', (i.serial <> '' and position(lower(regexp_replace(coalesce(variant_code,''),'[^a-z0-9]+','','g')) in i.serial)>0)
+      'manufacturer_exact', (raw_rank >= 0.18 and man <> '' and lower(regexp_replace(manufacturer_name,'[^a-z0-9]+','','g'))=man),
+      'model_exact', (model <> '' and lower(regexp_replace(model_name,'[^a-z0-9]+','','g'))=model),
+      'variant_exact', (variant <> '' and lower(regexp_replace(coalesce(variant_name,''),'[^a-z0-9]+','','g'))=variant),
+      'serial_prefix', (serial <> '' and serial <> '' and variant_code is not null and left(serial,length(lower(regexp_replace(variant_code,'[^a-z0-9]+','','g'))))=lower(regexp_replace(variant_code,'[^a-z0-9]+','','g')))
     ) as match_reasons
   from scored
   order by raw_rank desc, manufacturer_name, model_name, variant_name
