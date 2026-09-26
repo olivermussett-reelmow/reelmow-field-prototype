@@ -871,6 +871,7 @@ document.addEventListener("click",e=>{
   if(x==="back"||x==="home")return setView("garage");
   if(x==="edit")return editModal();
   if(x==="hours")return hoursModal();
+  if(x==="fault")return faultModal();
   if(x==="document-upload")return evidenceUploadModal("document");
   if(x==="photo-upload")return evidenceUploadModal("photo");
   if(x==="open-document")return openDocument(e.target.closest("[data-id]")?.dataset.id);
