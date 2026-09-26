@@ -475,7 +475,7 @@ async function saveHours(e){
   if(state.demo){m.current_engine_hours=eh;m.current_reel_hours=rh;closeModal();toast("Hours updated");return renderDetail()}
   if(!navigator.onLine){m.current_engine_hours=eh;m.current_reel_hours=rh;queueMutation("hours",{machineId:m.id,engineHours:eh,reelHours:rh,notes,source:"manual"});return renderDetail()}
   try{
-    const {error}=await state.client.schema("garage").rpc("record_machine_hours",{target_machine:m.id,new_engine_hours:eh,new_reel_hours:rh,reading_source:"manual",reading_notes:notes||null});
+    const {error}=await state.client.schema("garage").rpc("sync_record_machine_hours",{operation_id:crypto.randomUUID(),target_machine:m.id,new_engine_hours:eh,new_reel_hours:rh,reading_source:"manual",reading_notes:notes||null});
     if(error)throw error;
     closeModal();await loadMachines();state.selected=state.machines.find(x=>x.id===m.id)||m;toast("Hours updated");render();
   }catch(x){if(!navigator.onLine){m.current_engine_hours=eh;m.current_reel_hours=rh;queueMutation("hours",{machineId:m.id,engineHours:eh,reelHours:rh,notes,source:"manual"});return renderDetail()}toast(x.message||"Could not save hours")}
@@ -501,7 +501,7 @@ async function saveService(e){
     queueMutation("service",{machineId:m.id,taskId:task,serviceDate:new Date(date+"T12:00:00").toISOString(),engineHours:eh,reelHours:rh,performedBy:performed,cost,notes,evidence:{}});closeModal();return renderDetail();
   }
   try{
-    const {error}=await state.client.schema("garage").rpc("record_machine_service",{target_machine:m.id,target_service_task:task,service_date:new Date(date+"T12:00:00").toISOString(),service_engine_hours:eh,service_reel_hours:rh,performed_by_name:performed||null,service_cost:cost,service_notes:notes||null,evidence_json:{}});
+    const {error}=await state.client.schema("garage").rpc("sync_record_machine_service",{operation_id:crypto.randomUUID(),target_machine:m.id,target_service_task:task,service_date:new Date(date+"T12:00:00").toISOString(),service_engine_hours:eh,service_reel_hours:rh,performed_by_name:performed||null,service_cost:cost,service_notes:notes||null,evidence_json:{}});
     if(error)throw error;
     closeModal();await loadMachines();state.selected=state.machines.find(x=>x.id===m.id)||m;toast("Service recorded");render();
   }catch(x){toast(x.message||"Could not save service record")}
@@ -591,7 +591,7 @@ function faultModal(){
     try{
       if(state.demo){closeModal();toast("Problem reported");return}
       if(!navigator.onLine){closeModal();queueMutation("fault",{machineId:m.id,severity,description});return}
-      const {error}=await state.client.schema("garage").from("machine_faults").insert({machine_id:m.id,severity,status:"open",description,reported_by:state.user.id});
+      const {error}=await state.client.schema("garage").rpc("sync_report_machine_fault",{operation_id:crypto.randomUUID(),target_machine:m.id,target_severity:severity,target_description:description});
       if(error)throw error;
       closeModal();toast("Problem reported");render();
     }catch(x){toast(x.message||"Could not report problem")}
