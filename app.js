@@ -256,7 +256,7 @@ function pendingActivityFor(machineId){
     pending:true
   }));
 }
-async async function loadActivity(){
+async function loadActivity(){
   if(state.demo){
     state.activity=[
       {type:"service",machine_id:"demo-lf3800",at:"2026-08-14T10:00:00Z",title:"Service completed",task_name:"Engine oil change",engine_hours:1180},
@@ -335,12 +335,21 @@ function renderGarage(){
 function renderDetail(){
   const m=state.selected;
   const pending=readOutbox().filter(x=>x.payload?.machineId===m.id).length;
-  mount("<div class='breadcrumb'><button class='back' data-action='back'>← Garage</button><span>/</span><span>Machine profile</span></div><section class='detail-head'><div class='machine-title'><div class='machine-title-icon'>⚙︎</div><div><div class='eyebrow'>"+esc(m.manufacturer?.name||"Manufacturer")+"</div><h1 style='font-size:38px;margin-bottom:5px'>"+esc(m.nickname||m.model?.model_name||"Machine")+"</h1><p class='muted'>"+esc(m.variant?.variant_name||"Variant")+"</p></div></div><div class='actions'><span class='badge "+(m.status==="service_due"?"service":"ready")+"'>"+esc((m.status||"ready").replaceAll("_"," "))+"</span></div></section><div class='detail-grid'><div><div class='card'><div class='section-head' style='margin:0 0 12px'><div><div class='eyebrow'>Machine health</div><h2>At a glance</h2></div><button class='btn secondary small' data-action='edit'>Edit</button></div><div class='metric-row'><div class='metric'><div class='num'>"+(m.current_engine_hours??"—")+"</div><div class='label'>Engine hours</div></div><div class='metric'><div class='num'>"+(m.current_reel_hours??"—")+"</div><div class='label'>Reel hours</div></div></div><div class='actions' style='margin-top:14px'><button class='btn small' data-action='hours'>Update hours</button><button class='btn secondary small' data-action='service'>Record service</button></div><div class='list'><div class='list-row'><div><div class='list-title'>Serial number</div><div class='list-meta'>"+esc(m.serial_number||"Not recorded")+"</div></div></div><div class='list-row'><div><div class='list-title'>Asset number</div><div class='list-meta'>"+esc(m.asset_number||"Not recorded")+"</div></div></div><div class='list-row'><div><div class='list-title'>Purchase date</div><div class='list-meta'>"+esc(m.purchase_date||"Not recorded")+"</div></div></div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Service status</div><h2>What needs doing?</h2><div id='service-due'><div class='loading'><div class='spinner'></div>Checking service schedule…</div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Catalogue specifications</div><h2>Known machine data</h2><div id='specs'><div class='loading'><div class='spinner'></div>Loading verified specifications…</div></div></div></div><div><div class='card'><div class='eyebrow'>Service history</div><h2>Recent work</h2><div id='service-history'><div class='loading'><div class='spinner'></div>Loading service history…</div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Faults & repairs</div><h2>Problems and resolution</h2><div class='actions' style='margin:10px 0'><button class='btn secondary small' data-action='fault'>Report problem</button></div><div id='machine-faults'><div class='loading'><div class='spinner'></div>Loading fault history…</div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Documents</div><h2>Machine knowledge</h2><div class='actions' style='margin:10px 0'><button class='btn secondary small' data-action='document-upload'>Add document</button></div><div id='machine-documents'><div class='loading'><div class='spinner'></div>Loading documents…</div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Photos</div><h2>Machine evidence</h2><div class='actions' style='margin:10px 0'><button class='btn secondary small' data-action='photo-upload'>Take / add photo</button></div><div id='machine-photos'><div class='loading'><div class='spinner'></div>Loading photos…</div></div></div></div></div>"+(pending?"<div class='note' style='margin:0 0 15px'><b>"+pending+" change"+(pending===1?"":"s")+" saved on this device.</b> It will sync automatically when online.</div>":""));
+  mount("<div class='breadcrumb'><button class='back' data-action='back'>← Garage</button><span>/</span><span>Machine profile</span></div><section class='detail-head'><div class='machine-title'><div class='machine-title-icon'>⚙︎</div><div><div class='eyebrow'>"+esc(m.manufacturer?.name||"Manufacturer")+"</div><h1 style='font-size:38px;margin-bottom:5px'>"+esc(m.nickname||m.model?.model_name||"Machine")+"</h1><p class='muted'>"+esc(m.variant?.variant_name||"Variant")+"</p></div></div><div class='actions'><button class='badge "+statusClass(m.status)+"' data-action='status'>"+esc(statusLabel(m.status))+" · Change</button></div></section><div class='detail-grid'><div><div class='card'><div class='section-head' style='margin:0 0 12px'><div><div class='eyebrow'>Machine health</div><h2>At a glance</h2></div><button class='btn secondary small' data-action='edit'>Edit</button></div><div class='metric-row'><div class='metric'><div class='num'>"+(m.current_engine_hours??"—")+"</div><div class='label'>Engine hours</div></div><div class='metric'><div class='num'>"+(m.current_reel_hours??"—")+"</div><div class='label'>Reel hours</div></div></div><div class='actions' style='margin-top:14px'><button class='btn small' data-action='hours'>Update hours</button><button class='btn secondary small' data-action='service'>Record service</button></div><div class='list'><div class='list-row'><div><div class='list-title'>Serial number</div><div class='list-meta'>"+esc(m.serial_number||"Not recorded")+"</div></div></div><div class='list-row'><div><div class='list-title'>Asset number</div><div class='list-meta'>"+esc(m.asset_number||"Not recorded")+"</div></div></div><div class='list-row'><div><div class='list-title'>Purchase date</div><div class='list-meta'>"+esc(m.purchase_date||"Not recorded")+"</div></div></div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Service status</div><h2>What needs doing?</h2><div id='service-due'><div class='loading'><div class='spinner'></div>Checking service schedule…</div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Catalogue specifications</div><h2>Known machine data</h2><div id='specs'><div class='loading'><div class='spinner'></div>Loading verified specifications…</div></div></div></div><div><div class='card'><div class='eyebrow'>Service history</div><h2>Recent work</h2><div id='service-history'><div class='loading'><div class='spinner'></div>Loading service history…</div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Faults & repairs</div><h2>Problems and resolution</h2><div class='actions' style='margin:10px 0'><button class='btn secondary small' data-action='fault'>Report problem</button></div><div id='machine-faults'><div class='loading'><div class='spinner'></div>Loading fault history…</div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Documents</div><h2>Machine knowledge</h2><div class='actions' style='margin:10px 0'><button class='btn secondary small' data-action='document-upload'>Add document</button></div><div id='machine-documents'><div class='loading'><div class='spinner'></div>Loading documents…</div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Photos</div><h2>Machine evidence</h2><div class='actions' style='margin:10px 0'><button class='btn secondary small' data-action='photo-upload'>Take / add photo</button></div><div id='machine-photos'><div class='loading'><div class='spinner'></div>Loading photos…</div></div></div></div></div>"+(pending?"<div class='note' style='margin:0 0 15px'><b>"+pending+" change"+(pending===1?"":"s")+" saved on this device.</b> It will sync automatically when online.</div>":""));
   loadSpecs(m);loadServiceData(m);loadEvidence(m);loadMachineFaults(m)
 }
+function statusLabel(status){return String(status||"ready").replaceAll("_"," ").replace(/\b\w/g,c=>c.toUpperCase())}
+function statusClass(status){return status==="service_due"||status==="out_of_service"?"service":status==="in_service"?"fault":status==="repaired"?"ready":"ready"}
 function faultHtml(){
   if(!state.machineFaults.length)return "<div class='empty-mini'><div class='tiny'>No reported problems.</div></div>";
-  return "<div class='list'>"+state.machineFaults.map(x=>"<div class='list-row fault-row'><div><div class='list-title'>"+esc(x.severity.toUpperCase())+" · "+esc(x.status.replace("_"," "))+"</div><div class='list-meta'>"+esc(new Date(x.reported_at).toLocaleDateString())+" · "+esc(x.description)+"</div>"+(x.resolution_notes?"<div class='list-meta' style='margin-top:4px'>"+esc(x.resolution_notes)+"</div>":"")+"</div>"+(x.status!=="resolved"?"<button class='btn ghost small' data-action='resolve-fault' data-id='"+esc(x.id)+"'>Resolve</button>":"<span class='badge ready'>RESOLVED</span>")+"</div>").join("")+"</div>";
+  return "<div class='list'>"+state.machineFaults.map(x=>{
+    const actions=x.status==="open"
+      ?"<button class='btn ghost small' data-action='ack-fault' data-id='"+esc(x.id)+"'>Acknowledge</button>"
+      :x.status==="acknowledged"
+        ?"<button class='btn ghost small' data-action='resolve-fault' data-id='"+esc(x.id)+"'>Resolve</button>"
+        :"<span class='badge ready'>RESOLVED</span>";
+    return "<div class='list-row fault-row'><div><div class='list-title'>"+esc(x.severity.toUpperCase())+" · "+esc(x.status.replace("_"," "))+"</div><div class='list-meta'>"+esc(new Date(x.reported_at).toLocaleDateString())+" · "+esc(x.description)+"</div>"+(x.resolution_notes?"<div class='list-meta' style='margin-top:4px'>"+esc(x.resolution_notes)+"</div>":"")+"</div><div class='actions'>"+actions+"</div></div>";
+  }).join("")+"</div>";
 }
 async function loadMachineFaults(m){
   if(state.demo){state.machineFaults=[]}
@@ -351,19 +360,46 @@ async function loadMachineFaults(m){
   }
   const box=document.querySelector("#machine-faults");if(box)box.innerHTML=faultHtml();
 }
+function acknowledgeFault(id){
+  const fault=state.machineFaults.find(x=>x.id===id);if(!fault)return;
+  if(state.demo){fault.status="acknowledged";closeModal();toast("Problem acknowledged");return renderDetail()}
+  (async()=>{
+    try{
+      const {error}=await state.client.schema("garage").rpc("acknowledge_machine_fault",{p_fault_id:id,p_notes:"Acknowledged in Garage"});
+      if(error)throw error;
+      await loadMachines();state.selected=state.machines.find(x=>x.id===state.selected.id)||state.selected;await loadMachineFaults(state.selected);closeModal();toast("Problem acknowledged");renderDetail();
+    }catch(x){toast(x.message||"Could not acknowledge problem")}
+  })();
+}
 function resolveFaultModal(id){
   const fault=state.machineFaults.find(x=>x.id===id);if(!fault)return;
-  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Resolve issue</div><h2>Close the loop.</h2><p class='tiny'>Record what was done so the issue becomes part of the machine history.</p></div><button class='close' data-action='close'>×</button></div><form id='resolve-form'><div class='field'><label>Resolution notes</label><textarea class='input' id='resolution-notes' rows='4' required placeholder='What was repaired, adjusted or checked?'></textarea></div><button class='btn' style='width:100%'>Mark resolved</button></form></div></div>");
+  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Resolve issue</div><h2>Return the machine to repair complete.</h2><p class='tiny'>Record what was repaired, adjusted or checked. The machine will move to Repaired.</p></div><button class='close' data-action='close'>×</button></div><form id='resolve-form'><div class='field'><label>Resolution notes</label><textarea class='input' id='resolution-notes' rows='4' required placeholder='What was repaired, adjusted or checked?'></textarea></div><button class='btn' style='width:100%'>Mark repaired</button></form></div></div>");
   document.querySelector("#resolve-form").addEventListener("submit",async e=>{
-    e.preventDefault();
-    if(state.demo){fault.status="resolved";fault.resolution_notes=val("#resolution-notes");fault.resolved_at=new Date().toISOString();closeModal();toast("Problem resolved");return renderDetail()}
+    e.preventDefault();const notes=val("#resolution-notes");if(!notes){toast("Resolution notes are required");return}
+    if(state.demo){fault.status="resolved";fault.resolution_notes=notes;fault.resolved_at=new Date().toISOString();state.selected.status="repaired";closeModal();toast("Problem resolved");return renderDetail()}
     try{
-      const {error}=await state.client.schema("garage").from("machine_faults").update({status:"resolved",resolved_at:new Date().toISOString(),resolution_notes:val("#resolution-notes"),updated_at:new Date().toISOString()}).eq("id",id);
+      const {error}=await state.client.schema("garage").rpc("resolve_machine_fault",{p_fault_id:id,p_resolution_notes:notes});
       if(error)throw error;
-      closeModal();await loadMachines();await loadMachineFaults(state.selected);toast("Problem resolved");renderDetail();
+      closeModal();await loadMachines();state.selected=state.machines.find(x=>x.id===state.selected.id)||state.selected;await loadMachineFaults(state.selected);toast("Problem resolved — machine is repaired");renderDetail();
     }catch(x){toast(x.message||"Could not resolve problem")}
   });
 }
+function statusTransitionModal(){
+  const m=state.selected;if(!m)return;
+  const transitions={ready:["service_due","in_service","out_of_service"],service_due:["in_service","ready","out_of_service"],in_service:["ready","service_due","out_of_service"],out_of_service:["in_service","repaired","retired"],repaired:["ready","out_of_service"],retired:[]}[m.status]||[];
+  if(!transitions.length)return toast("No manual status transitions are available.");
+  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Machine status</div><h2>Change operational state.</h2><p class='tiny'>Current status: "+esc(statusLabel(m.status))+". Choose the next valid state.</p></div><button class='close' data-action='close'>×</button></div><div class='picker-list'>"+transitions.map(x=>"<button class='picker-row' data-action='set-status' data-status='"+esc(x)+"'><span><strong>"+esc(statusLabel(x))+"</strong><small>"+esc(x==="in_service"?"Machine is being worked on":x==="out_of_service"?"Machine is unavailable":x==="repaired"?"Repair completed; awaiting return to service":x==="retired"?"Remove from active fleet":"Operational state")+"</small></span><span>›</span></button>").join("")+"</div></div></div>");
+}
+async function setMachineStatus(status){
+  const m=state.selected;if(!m)return;
+  if(state.demo){m.status=status;closeModal();toast("Status changed");return renderDetail()}
+  try{
+    const {data,error}=await state.client.schema("garage").rpc("transition_machine_status",{p_machine_id:m.id,p_target_status:status,p_notes:"Status changed in Garage"});
+    if(error)throw error;
+    closeModal();await loadMachines();state.selected=state.machines.find(x=>x.id===m.id)||m;await loadMachineFaults(state.selected);toast("Machine status updated");renderDetail();
+  }catch(x){toast(x.message||"Could not change machine status")}
+}
+
 function specsHtml(){
   return "<div class='spec-grid'>"+state.specs.map(s=>"<div class='spec'><div class='v'>"+esc(s.value_text??s.value_number??"—")+(s.unit?" "+esc(s.unit):"")+"</div><div class='k'>"+esc(s.label)+"</div></div>").join("")+"</div>"
 }
@@ -746,6 +782,9 @@ document.addEventListener("click",e=>{
     if(action==="hours")return hoursModal();if(action==="service")return serviceModal();return faultModal();
   }
   if(x==="resolve-fault")return resolveFaultModal(a.dataset.id);
+  if(x==="ack-fault")return acknowledgeFault(a.dataset.id);
+  if(x==="status")return statusTransitionModal();
+  if(x==="set-status")return setMachineStatus(a.dataset.status);
   if(x==="connection")return connectionModal();
   if(x==="demo"){state.demo=true;localStorage.setItem(DEMO_KEY,"true");loadDemo();closeModal();return render()}
   if(x==="close")return closeModal();
