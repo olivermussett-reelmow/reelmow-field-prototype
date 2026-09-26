@@ -256,7 +256,7 @@ function pendingActivityFor(machineId){
     pending:true
   }));
 }
-function loadActivity(){
+async function loadActivity(){
   if(state.demo){
     state.activity=[
       {type:"service",machine_id:"demo-lf3800",at:"2026-08-14T10:00:00Z",title:"Service completed",task_name:"Engine oil change",engine_hours:1180},
