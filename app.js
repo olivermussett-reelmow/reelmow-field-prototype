@@ -646,8 +646,15 @@ function unknownMachineModal(){
     if(state.demo){box.innerHTML="<div class='note'><b>Demo scan:</b> In live mode REELMOW reads the plate, matches it against the catalogue and asks you to confirm the suggested variant.</div>";return}
     try{
       const data=await imageDataUrl(file);
-      const {data:result,error}=await state.client.functions.invoke("identify-machine",{body:{image_data_url:data}});
-      if(error)throw error;if(result?.error)throw new Error(result.error);
+      const session=(await state.client.auth.getSession()).data.session;
+      if(!session?.access_token)throw new Error("Your REELMOW session has expired. Please sign in again.");
+      const c=cfg();
+      if(!c?.url||!c?.key)throw new Error("REELMOW is not connected to its production service.");
+      const response=await fetch(c.url+"/functions/v1/identify-machine",{method:"POST",headers:{"Authorization":"Bearer "+session.access_token,"apikey":c.key,"Content-Type":"application/json"},body:JSON.stringify({image_data_url:data})});
+      const raw=await response.text();
+      let result=null;try{result=raw?JSON.parse(raw):null}catch{}
+      if(!response.ok)throw new Error(result?.error||("Plate scanner returned HTTP "+response.status));
+      if(result?.error)throw new Error(result.error);
       const candidates=await matchPlateIdentification(result);
       state.pendingIdentification={serial_number:result.serial_number||null,manufacturer:result.manufacturer||null,product_family:result.product_family||null,model:result.model||null,variant:result.variant||null,visible_text:result.visible_text||"",confidence:Number(result.confidence||0),uncertainty:result.uncertainty||"",plateFile:file,candidates};
       const confidence=Math.round(Number(result.confidence||0)*100);
