@@ -15,7 +15,7 @@ const demoCatalogue=[
   {model_id:"demo-allett-shaver",manufacturer_name:"Allett",model_name:"Shaver",variant_id:"demo-allett-shaver-24",variant_name:"Shaver 24",machine_type:"Cylinder Mower",rank:.97},
   {model_id:"demo-atco-royale",manufacturer_name:"Atco",model_name:"Royale 24",variant_id:"demo-atco-royale-ic",variant_name:"Royale 24 I/C - F016310542",machine_type:"Cylinder Mower",rank:.96}
 ];
-const state={client:null,user:null,org:null,garage:null,machines:[],selected:null,specs:[],serviceDue:[],serviceRecords:[],hoursLog:[],catalogueResults:[],dashboardDue:[],loading:false,error:"",pendingPlateFile:null,demo:localStorage.getItem(DEMO_KEY)==="true"};
+const state={client:null,user:null,org:null,garage:null,machines:[],selected:null,specs:[],serviceDue:[],serviceRecords:[],hoursLog:[],catalogueResults:[],dashboardDue:[],loading:false,error:"",pendingPlateFile:null,demo:localStorage.getItem(DEMO_KEY)==="true" && !(window.REELMOW_CONFIG?.url && window.REELMOW_CONFIG?.key)};
 
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const val=s=>document.querySelector(s)?.value.trim()||"";
