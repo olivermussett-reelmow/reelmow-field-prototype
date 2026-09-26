@@ -15,7 +15,7 @@ const demoCatalogue=[
   {model_id:"demo-allett-shaver",manufacturer_name:"Allett",model_name:"Shaver",variant_id:"demo-allett-shaver-24",variant_name:"Shaver 24",machine_type:"Cylinder Mower",rank:.97},
   {model_id:"demo-atco-royale",manufacturer_name:"Atco",model_name:"Royale 24",variant_id:"demo-atco-royale-ic",variant_name:"Royale 24 I/C - F016310542",machine_type:"Cylinder Mower",rank:.96}
 ];
-const state={client:null,user:null,role:null,org:null,garage:null,offline:false,syncing:false,outboxCount:0,machines:[],selected:null,specs:[],serviceDue:[],serviceRecords:[],hoursLog:[],catalogueResults:[],dashboardDue:[],openFaults:[],machineFaults:[],activity:[],mow:{active:false,paused:false,sessionId:null,machineId:null,watchId:null,startedAt:null,lastPoint:null,trackPoints:[],distanceM:0,points:0,accuracyM:null,speedMps:null,headingDeg:null,pattern:"stripe",targetSpeedKph:null},loading:false,error:"",pendingPlateFile:null,pendingIdentification:null,quickAction:null,view:localStorage.getItem("reelmow.view.v1")||"today",demo:localStorage.getItem(DEMO_KEY)==="true" && !(window.REELMOW_CONFIG?.url && window.REELMOW_CONFIG?.key)};
+const state={client:null,user:null,role:null,org:null,garage:null,orgs:[],garages:[],workspaceNeedsSelection:false,offline:false,syncing:false,outboxCount:0,machines:[],selected:null,specs:[],serviceDue:[],serviceRecords:[],hoursLog:[],catalogueResults:[],dashboardDue:[],openFaults:[],machineFaults:[],activity:[],mow:{active:false,paused:false,sessionId:null,machineId:null,watchId:null,startedAt:null,lastPoint:null,trackPoints:[],distanceM:0,points:0,accuracyM:null,speedMps:null,headingDeg:null,pattern:"stripe",targetSpeedKph:null},loading:false,error:"",pendingPlateFile:null,pendingIdentification:null,quickAction:null,view:localStorage.getItem("reelmow.view.v1")||"today",demo:localStorage.getItem(DEMO_KEY)==="true" && !(window.REELMOW_CONFIG?.url && window.REELMOW_CONFIG?.key)};
 
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const val=s=>document.querySelector(s)?.value.trim()||"";
@@ -91,14 +91,58 @@ async function boot(){
 }
 async function loadWorkspace(){
   const {data:m,error:me}=await state.client.schema("garage").from("memberships").select("organization_id,role").eq("user_id",state.user.id);if(me)throw me;
-  if(!m?.length){state.org=null;state.garage=null;state.machines=[];return}
+  if(!m?.length){state.org=null;state.garage=null;state.orgs=[];state.garages=[];state.workspaceNeedsSelection=false;state.machines=[];return}
   const ids=m.map(x=>x.organization_id);
   const {data:o,error:oe}=await state.client.schema("garage").from("organizations").select("id,name,slug,created_at").in("id",ids).order("created_at",{ascending:true});if(oe)throw oe;
-  state.org=o?.[0]||null;
+  state.orgs=o||[];
+  const {data:g,error:ge}=await state.client.schema("garage").from("garages").select("id,organization_id,name,location_name,created_at").in("organization_id",ids).order("created_at");if(ge)throw ge;
+  state.garages=g||[];
+  const savedOrg=localStorage.getItem("reelmow.workspace.org.v1");
+  const savedGarage=localStorage.getItem("reelmow.workspace.garage.v1");
+  const selectedOrg=state.orgs.find(x=>x.id===savedOrg)||state.orgs[0]||null;
+  const orgGarages=state.garages.filter(x=>x.organization_id===selectedOrg?.id);
+  const selectedGarage=orgGarages.find(x=>x.id===savedGarage)||orgGarages[0]||null;
+  const hasMultipleWorkspaces=state.orgs.length>1||state.garages.length>1;
+  const savedWorkspaceValid=!!savedOrg&&!!savedGarage&&!!selectedOrg&&!!selectedGarage;
+  state.org=savedWorkspaceValid?selectedOrg:(hasMultipleWorkspaces?null:selectedOrg);
   state.role=m.find(x=>x.organization_id===state.org?.id)?.role||null;
-  if(!state.org)return;
-  const {data:g,error:ge}=await state.client.schema("garage").from("garages").select("id,name,location_name").eq("organization_id",state.org.id).order("created_at");if(ge)throw ge;
-  state.garage=g?.[0]||null;if(state.garage)await loadMachines();
+  state.garage=savedWorkspaceValid?selectedGarage:(hasMultipleWorkspaces?null:selectedGarage);
+  state.workspaceNeedsSelection=hasMultipleWorkspaces&&!savedWorkspaceValid;
+  if(state.org&&state.garage){
+    localStorage.setItem("reelmow.workspace.org.v1",state.org.id);
+    localStorage.setItem("reelmow.workspace.garage.v1",state.garage.id);
+    await loadMachines();
+  }else{
+    state.machines=[];
+  }
+}
+async function selectWorkspace(orgId,garageId){
+  const org=state.orgs.find(x=>x.id===orgId);
+  const garage=state.garages.find(x=>x.id===garageId&&x.organization_id===orgId);
+  if(!org||!garage)return toast("That workspace is no longer available to you.");
+  state.org=org;
+  state.role=state.user?((await state.client.schema("garage").from("memberships").select("role").eq("user_id",state.user.id).eq("organization_id",orgId).maybeSingle()).data?.role||null):null;
+  state.garage=garage;
+  state.workspaceNeedsSelection=false;
+  localStorage.setItem("reelmow.workspace.org.v1",org.id);
+  localStorage.setItem("reelmow.workspace.garage.v1",garage.id);
+  state.selected=null;
+  await loadMachines();
+  render();
+}
+function workspacePickerModal(){
+  const rows=state.orgs.map(o=>{
+    const gs=state.garages.filter(g=>g.organization_id===o.id);
+    return "<div class='card' style='margin-top:10px'><div class='eyebrow'>Organisation</div><h3>"+esc(o.name)+"</h3><div class='picker-list'>"+(gs.length?gs.map(g=>"<button class='picker-row' data-action='select-workspace' data-org-id='"+esc(o.id)+"' data-garage-id='"+esc(g.id)+"'><span><strong>"+esc(g.name)+"</strong><small>"+esc(g.location_name||"Garage")+"</small></span><span>›</span></button>").join(""):"<div class='tiny'>No Garage configured for this organisation.</div>")+"</div></div>"
+  }).join("");
+  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Workspace</div><h2>Choose a Garage.</h2><p class='tiny'>REELMOW keeps each organisation and physical Garage separate.</p></div><button class='close' data-action='close'>×</button></div>"+rows+"</div></div>");
+}
+function renderWorkspacePicker(){
+  const rows=state.orgs.map(o=>{
+    const gs=state.garages.filter(g=>g.organization_id===o.id);
+    return "<div class='card' style='margin-top:10px'><div class='eyebrow'>"+esc(o.name)+"</div><div class='picker-list'>"+(gs.length?gs.map(g=>"<button class='picker-row' data-action='select-workspace' data-org-id='"+esc(o.id)+"' data-garage-id='"+esc(g.id)+"'><span><strong>"+esc(g.name)+"</strong><small>"+esc(g.location_name||"Garage")+"</small></span><span>›</span></button>").join(""):"<div class='tiny'>No Garage configured for this organisation.</div>")+"</div></div>"
+  }).join("");
+  mount("<div style='max-width:760px;margin:7vh auto'><div class='card'><div class='eyebrow'>Workspace selection</div><h1 style='font-size:40px'>Choose where you're working.</h1><p class='lede'>Select the organisation and physical Garage you want to operate.</p>"+rows+"</div></div>");
 }
 async function loadMachines(){
   const {data,error}=await state.client.schema("garage").from("machines").select("id,garage_id,machine_variant_id,serial_number,asset_number,nickname,purchase_date,purchase_price,warranty_start_date,warranty_end_date,warranty_provider,ownership_type,ownership_name,current_engine_hours,current_reel_hours,status,notes,created_at").eq("garage_id",state.garage.id).order("created_at",{ascending:false});if(error)throw error;
@@ -152,6 +196,7 @@ function setView(view){
 function render(){
   if(!state.demo&&!connected())return renderConnect();
   if(!state.demo&&!state.user)return renderAuth();
+  if(!state.demo&&state.workspaceNeedsSelection)return renderWorkspacePicker();
   if(!state.demo&&!state.org)return renderOrg();
   if(!state.demo&&!state.garage)return renderGarageSetup();
   if(state.mow.active)return renderMowScreen();
@@ -290,7 +335,7 @@ function renderActivity(){
   mount("<section class='page-intro'><div class='eyebrow'>Activity</div><h1>What happened?</h1><p class='lede'>A single operational history for services, hours and machine issues.</p>"+(pending?"<div class='note' style='margin-top:14px'><b>"+pending+" saved change"+(pending===1?"":"s")+" waiting to sync.</b> REELMOW will retry automatically when a connection is available.</div>":"")+"</section><div id='activity-content'></div>");
 }
 function renderProfile(){
-  mount("<section class='page-intro'><div class='eyebrow'>Profile</div><h1>Your workspace.</h1><p class='lede'>Organisation, account and operating preferences.</p></section><div class='grid two' style='margin-top:20px'><div class='card'><div class='eyebrow'>Organisation</div><h2>"+esc(state.org?.name||"REELMOW Demo")+"</h2><p class='tiny'>"+esc(state.garage?.name||"Main Garage")+" · "+esc(state.garage?.location_name||"Field workspace")+"</p></div><div class='card'><div class='eyebrow'>Account</div><h2>"+esc(state.user?.email||"Demo user")+"</h2><p class='tiny'>Your REELMOW field workspace.</p></div></div>");
+  mount("<section class='page-intro'><div class='eyebrow'>Profile</div><h1>Your workspace.</h1><p class='lede'>Organisation, account and operating preferences.</p></section><div class='grid two' style='margin-top:20px'><div class='card'><div class='eyebrow'>Current workspace</div><h2>"+esc(state.org?.name||"REELMOW Demo")+"</h2><p class='tiny'>"+esc(state.garage?.name||"Main Garage")+" · "+esc(state.garage?.location_name||"Field workspace")+"</p><button class='btn secondary small' style='margin-top:12px' data-action='switch-workspace'>Switch workspace</button></div><div class='card'><div class='eyebrow'>Account</div><h2>"+esc(state.user?.email||"Demo user")+"</h2><p class='tiny'>Your REELMOW field workspace.</p></div></div>");
 }
 function renderCataloguePage(){
   mount("<section class='page-intro'><div class='eyebrow'>Catalogue</div><h1>Find a machine.</h1><p class='lede'>Start with verified manufacturer, model and variant data.</p></section><div class='card' style='margin-top:20px'><button class='btn' data-action='add'>Search catalogue</button><button class='btn secondary' style='margin-left:8px' data-action='unknown-machine'>Scan model plate</button></div>");
@@ -811,6 +856,8 @@ document.addEventListener("click",e=>{
   if(x==="status")return statusTransitionModal();
   if(x==="set-status")return setMachineStatus(a.dataset.status);
   if(x==="connection")return connectionModal();
+  if(x==="switch-workspace")return workspacePickerModal();
+  if(x==="select-workspace"){return selectWorkspace(a.dataset.orgId,a.dataset.garageId).catch(err=>toast(err.message||"Could not switch workspace"))}
   if(x==="demo"){state.demo=true;localStorage.setItem(DEMO_KEY,"true");loadDemo();closeModal();return render()}
   if(x==="close")return closeModal();
   if(x==="add"){state.catalogueResults=[];return addModal()}
