@@ -1,35 +1,46 @@
 name: REELMOW Quality Gate
 
 on:
-  push:
-    branches: ["**"]
   pull_request:
+  push:
+    branches: [main]
 
 permissions:
   contents: read
 
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   static-check:
+    name: Static and Garage V1 checks
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - name: Check JavaScript syntax
-        run: node --check app.js
-      - name: Check service worker syntax
-        run: node --check sw.js
-      - name: Verify required frontend files
+        run: |
+          node --check app.js
+          node --check sw.js
+
+      - name: Run repository quality gate
+        run: node scripts/quality-check.mjs
+
+      - name: Check whitespace errors
+        run: git diff --check
+
+      - name: Verify Pages workflow
         shell: bash
         run: |
           set -euo pipefail
-          test -s index.html
-          test -s app.js
-          test -s styles.css
-          test -s sw.js
-          test -s manifest.webmanifest
-          test -s icon.svg
-          grep -q 'reelmow.config.js' index.html
-          grep -q 'Today' app.js
-          grep -q 'quick-actions' app.js
-          grep -q 'machine_faults' app.js
-          echo "REELMOW static quality checks passed."
+          test -s .github/workflows/pages.yml
+          grep -q 'SUPABASE_URL' .github/workflows/pages.yml
+          grep -q 'SUPABASE_PUBLISHABLE_KEY' .github/workflows/pages.yml
+          echo "Pages workflow configuration verified."
