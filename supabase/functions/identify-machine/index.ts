@@ -3,8 +3,13 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 const openai = new OpenAI({ apiKey: Deno.env.get("OPENAI_API_KEY")! });
 
+const corsHeaders = {"Access-Control-Allow-Origin":"*","Access-Control-Allow-Headers":"authorization, x-client-info, apikey, content-type","Access-Control-Allow-Methods":"POST, OPTIONS"};
+
+function json(body: unknown, status=200){return new Response(JSON.stringify(body),{status,headers:{...corsHeaders,"content-type":"application/json"}})}
+
 Deno.serve(async req => {
-  if(req.method!=="POST") return new Response(JSON.stringify({error:"POST required"}),{status:405,headers:{"content-type":"application/json"}});
+  if(req.method==="OPTIONS") return new Response(null,{status:204,headers:corsHeaders});
+  if(req.method!=="POST") return json({error:"POST required"},405);
   try{
     const auth=req.headers.get("Authorization")||"";
     if(!auth.startsWith("Bearer ")) throw new Error("Authentication required");
