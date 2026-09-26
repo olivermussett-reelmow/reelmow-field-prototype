@@ -245,7 +245,7 @@ function activityHtml(){
     return "<article class='activity-row'><div class='activity-icon "+esc(x.type)+"'>"+activityIcon(x.type)+"</div><div class='activity-body'><div class='activity-title'>"+esc(x.title)+"</div><div class='activity-machine'>"+esc(m?.nickname||m?.model?.model_name||"Machine")+" · "+esc(date)+"</div><div class='activity-detail'>"+esc(detail)+"</div></div><span class='badge "+(x.type==="fault"?"service":"ready")+"'>"+esc(x.type)+"</span></article>";
   }).join("")+"</div>";
 }
-async function pendingActivityFor(machineId){
+function pendingActivityFor(machineId){
   return readOutbox().filter(x=>x.payload?.machineId===machineId).map(x=>({
     type:x.type==="fault"?"fault":x.type,
     machine_id:machineId,
