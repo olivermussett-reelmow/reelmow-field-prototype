@@ -7,7 +7,7 @@ async function loadSupabaseClient(){
   return createClient;
 }
 
-const CONFIG_KEY="reelmow.connection.v1", DEMO_KEY="reelmow.demo.v1";
+const CONFIG_KEY="reelmow.connection.v1", DEMO_KEY="reelmow.demo.v1", OUTBOX_KEY="reelmow.outbox.v1";
 const app=document.querySelector("#app");
 const demoCatalogue=[
   {model_id:"830038a1-6367-4beb-87f1-f692c98dc9ef",manufacturer_name:"Jacobsen",model_name:"LF3800",variant_id:"c7834745-3328-4d30-ae8a-bb35f7798848",variant_name:"LF3800 5-Gang",machine_type:"Cylinder Mower",rank:1},
@@ -15,7 +15,7 @@ const demoCatalogue=[
   {model_id:"demo-allett-shaver",manufacturer_name:"Allett",model_name:"Shaver",variant_id:"demo-allett-shaver-24",variant_name:"Shaver 24",machine_type:"Cylinder Mower",rank:.97},
   {model_id:"demo-atco-royale",manufacturer_name:"Atco",model_name:"Royale 24",variant_id:"demo-atco-royale-ic",variant_name:"Royale 24 I/C - F016310542",machine_type:"Cylinder Mower",rank:.96}
 ];
-const state={client:null,user:null,org:null,garage:null,machines:[],selected:null,specs:[],serviceDue:[],serviceRecords:[],hoursLog:[],catalogueResults:[],dashboardDue:[],openFaults:[],machineFaults:[],activity:[],mow:{active:false,paused:false,sessionId:null,machineId:null,watchId:null,startedAt:null,lastPoint:null,trackPoints:[],distanceM:0,points:0,accuracyM:null,speedMps:null,headingDeg:null,pattern:"stripe",targetSpeedKph:null},loading:false,error:"",pendingPlateFile:null,quickAction:null,view:localStorage.getItem("reelmow.view.v1")||"today",demo:localStorage.getItem(DEMO_KEY)==="true" && !(window.REELMOW_CONFIG?.url && window.REELMOW_CONFIG?.key)};
+const state={client:null,user:null,org:null,garage:null,offline:false,syncing:false,outboxCount:0,machines:[],selected:null,specs:[],serviceDue:[],serviceRecords:[],hoursLog:[],catalogueResults:[],dashboardDue:[],openFaults:[],machineFaults:[],activity:[],mow:{active:false,paused:false,sessionId:null,machineId:null,watchId:null,startedAt:null,lastPoint:null,trackPoints:[],distanceM:0,points:0,accuracyM:null,speedMps:null,headingDeg:null,pattern:"stripe",targetSpeedKph:null},loading:false,error:"",pendingPlateFile:null,quickAction:null,view:localStorage.getItem("reelmow.view.v1")||"today",demo:localStorage.getItem(DEMO_KEY)==="true" && !(window.REELMOW_CONFIG?.url && window.REELMOW_CONFIG?.key)};
 
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const val=s=>document.querySelector(s)?.value.trim()||"";
@@ -29,6 +29,39 @@ const cfg=()=>{try{
 }catch{return null}};
 const connected=()=>{const c=cfg();return !!(c?.url&&c?.key)};
 function toast(t){document.querySelector(".toast")?.remove();const e=document.createElement("div");e.className="toast";e.textContent=t;document.body.appendChild(e);setTimeout(()=>e.remove(),2600)}
+function readOutbox(){try{return JSON.parse(localStorage.getItem(OUTBOX_KEY)||"[]")}catch{return[]}}
+function writeOutbox(items){localStorage.setItem(OUTBOX_KEY,JSON.stringify(items));state.outboxCount=items.length}
+function queueMutation(type,payload){
+  const items=readOutbox();
+  items.push({id:crypto.randomUUID(),type,payload,createdAt:new Date().toISOString()});
+  writeOutbox(items);state.offline=true;toast("Saved on this device. It will sync when you're back online.");render();
+}
+async function syncOutbox(){
+  if(state.demo||!state.client||!state.user||!navigator.onLine||state.syncing)return;
+  const items=readOutbox();state.outboxCount=items.length;if(!items.length){state.offline=false;return}
+  state.syncing=true;
+  const remaining=[...items];
+  for(const item of items){
+    try{
+      let result;
+      if(item.type==="hours"){
+        result=await state.client.schema("garage").rpc("sync_record_machine_hours",{operation_id:item.id,target_machine:item.payload.machineId,new_engine_hours:item.payload.engineHours,new_reel_hours:item.payload.reelHours,reading_source:item.payload.source||"manual",reading_notes:item.payload.notes||null});
+      }else if(item.type==="service"){
+        result=await state.client.schema("garage").rpc("sync_record_machine_service",{operation_id:item.id,target_machine:item.payload.machineId,target_service_task:item.payload.taskId||null,service_date:item.payload.serviceDate,service_engine_hours:item.payload.engineHours,service_reel_hours:item.payload.reelHours,performed_by_name:item.payload.performedBy||null,service_cost:item.payload.cost,service_notes:item.payload.notes||null,evidence_json:item.payload.evidence||{}});
+      }else if(item.type==="fault"){
+        result=await state.client.schema("garage").rpc("sync_report_machine_fault",{operation_id:item.id,target_machine:item.payload.machineId,target_severity:item.payload.severity,target_description:item.payload.description});
+      }
+      if(result?.error)throw result.error;
+      remaining.shift();
+    }catch(err){
+      if(!navigator.onLine)break;
+      console.warn("REELMOW sync deferred",err);
+      break;
+    }
+  }
+  writeOutbox(remaining);state.syncing=false;state.offline=remaining.length>0;
+  if(remaining.length!==items.length){toast(remaining.length?"Some saved changes are still waiting to sync.":"Saved changes synced.");try{await loadMachines()}catch{}}
+}
 function modal(h){document.querySelector(".modal-backdrop")?.remove();document.body.insertAdjacentHTML("beforeend",h)}
 function closeModal(){document.querySelector(".modal-backdrop")?.remove();state.pendingPlateFile=null}
 async function imageDataUrl(file,maxSize=1600,quality=.82){
@@ -49,10 +82,11 @@ async function connect(){
   state.client=makeClient(c.url,c.key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
   const {data,error}=await state.client.auth.getSession();if(error)throw error;
   state.user=data.session?.user||null;
+  state.outboxCount=readOutbox().length;state.offline=!navigator.onLine;
   state.client.auth.onAuthStateChange((_e,s)=>{state.user=s?.user||null;render()});
 }
 async function boot(){
-  try{await connect();if(state.demo){loadDemo();return render()}if(!connected()||!state.user)return render();await loadWorkspace();render()}
+  try{await connect();if(state.demo){loadDemo();return render()}if(!connected()||!state.user)return render();await loadWorkspace();render();syncOutbox()}
   catch(e){state.error=e.message||"Unable to connect";render()}
 }
 async function loadWorkspace(){
@@ -99,8 +133,8 @@ async function search(q){
   }catch(e){box.innerHTML="<div class='error'>"+esc(e.message||"Search failed")+"</div>"}finally{state.loading=false}
 }
 function shell(c){
-  const connectionLabel=state.demo?"Demo mode":connected()?"Connected":"Connect";
-  const connectionClass=state.demo?"demo":connected()?"ok":"";
+  const connectionLabel=state.demo?"Demo mode":state.offline?(state.outboxCount?"Offline · "+state.outboxCount+" saved":"Offline"):connected()?"Connected":"Connect";
+  const connectionClass=state.demo?"demo":state.offline?"offline":connected()?"ok":"";
   const active=state.view||"today";
   const nav=(key,label)=>"<button class='nav-link "+(active===key?"active":"")+"' data-action='"+key+"'>"+label+"</button>";
   return "<div class='shell'><header class='topbar'><div class='brand'><span class='mark'></span>REEL<span>MOW</span></div><nav class='top-nav'>"+nav("today","Today")+nav("garage","Garage")+nav("catalogue","Catalogue")+"</nav><div class='top-actions'><button class='btn ghost small' data-action='connection'><span class='dot "+connectionClass+"'></span>"+connectionLabel+"</button>"+(state.user?"<div class='avatar'>"+esc(initials(state.user.email))+"</div>":"")+"</div></header><main class='page'>"+c+"</main><nav class='mobile-nav'>"+nav("today","Today")+nav("garage","Garage")+nav("activity","Activity")+nav("profile","Profile")+"</nav><div class='footer'>REELMOW · Field operations, under control.</div></div>"
@@ -439,11 +473,12 @@ async function saveHours(e){
   e.preventDefault();const m=state.selected;
   const eh=num("#new-engine-hours"),rh=num("#new-reel-hours"),notes=val("#hours-notes");
   if(state.demo){m.current_engine_hours=eh;m.current_reel_hours=rh;closeModal();toast("Hours updated");return renderDetail()}
+  if(!navigator.onLine){m.current_engine_hours=eh;m.current_reel_hours=rh;queueMutation("hours",{machineId:m.id,engineHours:eh,reelHours:rh,notes,source:"manual"});return renderDetail()}
   try{
-    const {error}=await state.client.schema("garage").rpc("record_machine_hours",{target_machine:m.id,new_engine_hours:eh,new_reel_hours:rh,reading_source:"manual",reading_notes:notes||null});
+    const {error}=await state.client.schema("garage").rpc("sync_record_machine_hours",{operation_id:crypto.randomUUID(),target_machine:m.id,new_engine_hours:eh,new_reel_hours:rh,reading_source:"manual",reading_notes:notes||null});
     if(error)throw error;
     closeModal();await loadMachines();state.selected=state.machines.find(x=>x.id===m.id)||m;toast("Hours updated");render();
-  }catch(x){toast(x.message||"Could not save hours")}
+  }catch(x){if(!navigator.onLine){m.current_engine_hours=eh;m.current_reel_hours=rh;queueMutation("hours",{machineId:m.id,engineHours:eh,reelHours:rh,notes,source:"manual"});return renderDetail()}toast(x.message||"Could not save hours")}
 }
 function serviceModal(){
   const m=state.selected;
@@ -460,8 +495,13 @@ async function saveService(e){
     m.current_reel_hours=Math.max(Number(m.current_reel_hours||0),Number(rh||0));
     closeModal();toast("Service recorded");return renderDetail()
   }
+  if(!navigator.onLine){
+    state.serviceRecords.unshift({task_name:state.serviceDue.find(x=>x.service_task_id===task)?.task_name||"Other / unscheduled service",serviced_at:date,engine_hours:eh,reel_hours:rh,cost,notes});
+    m.current_engine_hours=Math.max(Number(m.current_engine_hours||0),Number(eh||0));m.current_reel_hours=Math.max(Number(m.current_reel_hours||0),Number(rh||0));
+    queueMutation("service",{machineId:m.id,taskId:task,serviceDate:new Date(date+"T12:00:00").toISOString(),engineHours:eh,reelHours:rh,performedBy:performed,cost,notes,evidence:{}});closeModal();return renderDetail();
+  }
   try{
-    const {error}=await state.client.schema("garage").rpc("record_machine_service",{target_machine:m.id,target_service_task:task,service_date:new Date(date+"T12:00:00").toISOString(),service_engine_hours:eh,service_reel_hours:rh,performed_by_name:performed||null,service_cost:cost,service_notes:notes||null,evidence_json:{}});
+    const {error}=await state.client.schema("garage").rpc("sync_record_machine_service",{operation_id:crypto.randomUUID(),target_machine:m.id,target_service_task:task,service_date:new Date(date+"T12:00:00").toISOString(),service_engine_hours:eh,service_reel_hours:rh,performed_by_name:performed||null,service_cost:cost,service_notes:notes||null,evidence_json:{}});
     if(error)throw error;
     closeModal();await loadMachines();state.selected=state.machines.find(x=>x.id===m.id)||m;toast("Service recorded");render();
   }catch(x){toast(x.message||"Could not save service record")}
@@ -550,7 +590,8 @@ function faultModal(){
     const description=val("#fault-description"), severity=val("#fault-severity");
     try{
       if(state.demo){closeModal();toast("Problem reported");return}
-      const {error}=await state.client.schema("garage").from("machine_faults").insert({machine_id:m.id,severity,status:"open",description,reported_by:state.user.id});
+      if(!navigator.onLine){closeModal();queueMutation("fault",{machineId:m.id,severity,description});return}
+      const {error}=await state.client.schema("garage").rpc("sync_report_machine_fault",{operation_id:crypto.randomUUID(),target_machine:m.id,target_severity:severity,target_description:description});
       if(error)throw error;
       closeModal();toast("Problem reported");render();
     }catch(x){toast(x.message||"Could not report problem")}
@@ -676,3 +717,7 @@ document.addEventListener("click",e=>{
   if(x==="signup")return signUp();
 });
 boot();
+
+window.addEventListener("online",()=>{state.offline=false;syncOutbox()});
+window.addEventListener("offline",()=>{state.offline=true;render()});
+setInterval(()=>{if(navigator.onLine)syncOutbox()},15000);
