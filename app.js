@@ -15,7 +15,7 @@ const demoCatalogue=[
   {model_id:"demo-allett-shaver",manufacturer_name:"Allett",model_name:"Shaver",variant_id:"demo-allett-shaver-24",variant_name:"Shaver 24",machine_type:"Cylinder Mower",rank:.97},
   {model_id:"demo-atco-royale",manufacturer_name:"Atco",model_name:"Royale 24",variant_id:"demo-atco-royale-ic",variant_name:"Royale 24 I/C - F016310542",machine_type:"Cylinder Mower",rank:.96}
 ];
-const state={client:null,user:null,org:null,garage:null,machines:[],selected:null,specs:[],serviceDue:[],serviceRecords:[],hoursLog:[],catalogueResults:[],dashboardDue:[],openFaults:[],machineFaults:[],activity:[],loading:false,error:"",pendingPlateFile:null,quickAction:null,view:localStorage.getItem("reelmow.view.v1")||"today",demo:localStorage.getItem(DEMO_KEY)==="true" && !(window.REELMOW_CONFIG?.url && window.REELMOW_CONFIG?.key)};
+const state={client:null,user:null,org:null,garage:null,machines:[],selected:null,specs:[],serviceDue:[],serviceRecords:[],hoursLog:[],catalogueResults:[],dashboardDue:[],openFaults:[],machineFaults:[],activity:[],mow:{active:false,paused:false,sessionId:null,machineId:null,watchId:null,startedAt:null,lastPoint:null,distanceM:0,points:0,accuracyM:null,speedMps:null,headingDeg:null,pattern:"stripe",targetSpeedKph:null},loading:false,error:"",pendingPlateFile:null,quickAction:null,view:localStorage.getItem("reelmow.view.v1")||"today",demo:localStorage.getItem(DEMO_KEY)==="true" && !(window.REELMOW_CONFIG?.url && window.REELMOW_CONFIG?.key)};
 
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const val=s=>document.querySelector(s)?.value.trim()||"";
@@ -118,6 +118,7 @@ function render(){
   if(!state.demo&&!state.user)return renderAuth();
   if(!state.demo&&!state.org)return renderOrg();
   if(!state.demo&&!state.garage)return renderGarageSetup();
+  if(state.mow.active)return renderMowScreen();
   if(state.selected)return renderDetail();
   if(state.view==="today")return renderToday();
   if(state.view==="garage")return renderGarage();
@@ -166,7 +167,24 @@ function renderToday(){
   mount("<section class='today-hero'><div><div class='eyebrow'>"+esc(state.demo?"Demo workspace":state.org?.name||"Your workspace")+"</div><h1>Good morning.<br>Let's get to work.</h1><p class='lede' style='color:#d2e1d8'>The important things are here. Everything else can stay out of the way.</p></div><div class='today-status'><span class='status-dot'></span><div><strong>Fleet operational</strong><small>"+machineCount+" machine"+(machineCount===1?"":"s")+" · "+(totalHours?Math.round(totalHours)+" recorded hours":"No hours recorded")+"</small></div></div></section>"+quickActions()+attentionBlock+"<section class='today-section'><div class='section-head'><div><div class='eyebrow'>Your Garage</div><h2>Machinery at a glance</h2></div><button class='btn secondary small' data-action='garage'>View Garage</button></div><div class='today-machine-strip'>"+(state.machines.length?state.machines.slice(0,4).map(card).join(""):"<div class='card empty'><h2>Start with your first machine.</h2><p class='lede'>Build the operational memory of your Garage.</p><button class='btn' data-action='quick-add'>Add machine</button></div>")+"</div></section>");
 }
 function quickActions(){
-  return "<div class='quick-actions'><button class='quick-action' data-action='quick-add'><span class='quick-icon'>＋</span><strong>Add machine</strong><small>Catalogue + plate</small></button><button class='quick-action' data-action='quick-hours'><span class='quick-icon'>◷</span><strong>Update hours</strong><small>Fast field entry</small></button><button class='quick-action' data-action='quick-service'><span class='quick-icon'>✓</span><strong>Record service</strong><small>Complete a task</small></button><button class='quick-action' data-action='quick-fault'><span class='quick-icon'>!</span><strong>Report problem</strong><small>Capture an issue</small></button></div>";
+  return "<div class='quick-actions'><button class='quick-action quick-mow' data-action='mow'><span class='quick-icon'>▰</span><strong>Start Mow Mode</strong><small>GPS track + speed</small></button><button class='quick-action' data-action='quick-add'><button class='quick-action' data-action='quick-add'><span class='quick-icon'>＋</span><strong>Add machine</strong><small>Catalogue + plate</small></button><button class='quick-action' data-action='quick-hours'><span class='quick-icon'>◷</span><strong>Update hours</strong><small>Fast field entry</small></button><button class='quick-action' data-action='quick-service'><span class='quick-icon'>✓</span><strong>Record service</strong><small>Complete a task</small></button><button class='quick-action' data-action='quick-fault'><span class='quick-icon'>!</span><strong>Report problem</strong><small>Capture an issue</small></button></div>";
+}
+function haversineM(a,b){
+  if(!a||!b)return 0;
+  const R=6371000,rad=Math.PI/180,dLat=(b.latitude-a.latitude)*rad,dLon=(b.longitude-a.longitude)*rad;
+  const q=Math.sin(dLat/2)**2+Math.cos(a.latitude*rad)*Math.cos(b.latitude*rad)*Math.sin(dLon/2)**2;
+  return 2*R*Math.asin(Math.sqrt(q));
+}
+function formatElapsed(start){
+  const s=Math.max(0,Math.floor((Date.now()-new Date(start).getTime())/1000));
+  return String(Math.floor(s/3600)).padStart(2,"0")+":"+String(Math.floor((s%3600)/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0");
+}
+function renderMowScreen(){
+  const m=state.machines.find(x=>x.id===state.mow.machineId);
+  const elapsed=state.mow.startedAt?formatElapsed(state.mow.startedAt):"00:00:00";
+  const speed=state.mow.speedMps!=null?(state.mow.speedMps*3.6).toFixed(1):"—";
+  const distance=(state.mow.distanceM/1000).toFixed(2);
+  mount("<section class='mow-screen'><div class='mow-top'><div><div class='eyebrow'>Mow Mode</div><h1>"+esc(m?.nickname||m?.model?.model_name||"Machine")+"</h1><div class='tiny'>"+esc(m?.manufacturer?.name||"")+" · "+esc(m?.variant?.variant_name||"")+"</div></div><button class='btn ghost small' data-action='exit-mow'>Exit</button></div><div class='mow-live-card'><div class='mow-live-state'><span class='mow-live-dot "+(state.mow.paused?"paused":"")+"'></span><strong>"+(state.mow.paused?"PAUSED":"TRACKING")+"</strong><small>"+(state.mow.accuracyM!=null?"GPS ±"+Math.round(state.mow.accuracyM)+" m":"Waiting for GPS…")+"</small></div><div class='mow-metrics'><div><span>"+elapsed+"</span><small>Time</small></div><div><span>"+distance+" km</span><small>Distance</small></div><div><span>"+speed+"</span><small>Speed km/h</small></div></div><div class='mow-target'><span>Pattern</span><strong>"+esc(state.mow.pattern.replace("_"," "))+"</strong><span>Target "+(state.mow.targetSpeedKph!=null?esc(state.mow.targetSpeedKph)+" km/h":"not set")+"</span></div></div><div class='mow-map'><div class='mow-crosshair'>⌖</div><div class='mow-map-copy'><strong>"+(state.mow.points?"Track recording":"Waiting for first position")+"</strong><small>"+state.mow.points+" GPS point"+(state.mow.points===1?"":"s")+" recorded</small></div></div><div class='mow-controls'><button class='btn secondary' data-action='mow-pause'>"+(state.mow.paused?"Resume":"Pause")+"</button><button class='btn mow-stop' data-action='mow-stop'>Finish mow</button></div></section>");
 }
 function machinePicker(action){
   if(!state.machines.length)return setView("catalogue");
@@ -462,6 +480,59 @@ function unknownMachineModal(){
   })
 }
 
+async function startMow(machineId){
+  if(!navigator.geolocation)return toast("Location is not available on this device.");
+  const m=state.machines.find(x=>x.id===machineId);if(!m)return;
+  state.mow={active:true,paused:false,sessionId:null,machineId,watchId:null,startedAt:new Date().toISOString(),lastPoint:null,distanceM:0,points:0,accuracyM:null,speedMps:null,headingDeg:null,pattern:"stripe",targetSpeedKph:null};
+  renderMowScreen();
+  if(state.demo){state.mow.sessionId="demo-"+crypto.randomUUID();startMowGps();return}
+  try{
+    const {data,error}=await state.client.schema("garage").from("mowing_sessions").insert({machine_id:machineId,started_by:state.user.id,pattern_type:state.mow.pattern,target_speed_kph:state.mow.targetSpeedKph}).select("id").single();
+    if(error)throw error;
+    state.mow.sessionId=data.id;startMowGps();
+  }catch(x){state.mow.active=false;toast(x.message||"Could not start Mow Mode");render()}
+}
+function startMowGps(){
+  state.mow.watchId=navigator.geolocation.watchPosition(async pos=>{
+    if(!state.mow.active||state.mow.paused)return;
+    const p={latitude:pos.coords.latitude,longitude:pos.coords.longitude};
+    state.mow.accuracyM=pos.coords.accuracy??null;state.mow.speedMps=pos.coords.speed??null;state.mow.headingDeg=pos.coords.heading??null;
+    if(state.mow.lastPoint)state.mow.distanceM+=haversineM(state.mow.lastPoint,p);
+    state.mow.lastPoint=p;state.mow.points++;
+    if(!state.demo&&state.mow.sessionId){
+      const {error}=await state.client.schema("garage").from("mowing_track_points").insert({session_id:state.mow.sessionId,latitude:p.latitude,longitude:p.longitude,accuracy_m:pos.coords.accuracy,speed_mps:pos.coords.speed,heading_deg:pos.coords.heading});
+      if(error)toast("GPS point could not be saved.");
+    }
+    renderMowScreen();
+  },err=>toast(err.message||"Unable to read GPS"),{enableHighAccuracy:true,maximumAge:3000,timeout:15000});
+}
+async function finishMow(){
+  if(!state.mow.active)return;
+  if(state.mow.watchId!=null)navigator.geolocation.clearWatch(state.mow.watchId);
+  const m=state.mow;
+  state.mow.active=false;
+  if(!state.demo&&m.sessionId){
+    const started=new Date(m.startedAt).getTime(),elapsedH=(Date.now()-started)/3600000;
+    const avg=elapsedH>0?(m.distanceM/1000)/elapsedH:null;
+    const {error}=await state.client.schema("garage").from("mowing_sessions").update({ended_at:new Date().toISOString(),status:"completed",distance_m:m.distanceM,average_speed_kph:avg}).eq("id",m.sessionId);
+    if(error)toast(error.message||"Mow session saved with warnings");
+  }
+  state.mow={active:false,paused:false,sessionId:null,machineId:null,watchId:null,startedAt:null,lastPoint:null,distanceM:0,points:0,accuracyM:null,speedMps:null,headingDeg:null,pattern:"stripe",targetSpeedKph:null};
+  toast("Mow session saved");setView("today");
+}
+function pauseMow(){
+  if(!state.mow.active)return;
+  state.mow.paused=!state.mow.paused;
+  renderMowScreen();
+}
+function exitMow(){
+  if(!state.mow.active)return setView("today");
+  if(confirm("Exit Mow Mode? The active session will be cancelled.")){
+    if(state.mow.watchId!=null)navigator.geolocation.clearWatch(state.mow.watchId);
+    if(!state.demo&&state.mow.sessionId)state.client.schema("garage").from("mowing_sessions").update({ended_at:new Date().toISOString(),status:"cancelled"}).eq("id",state.mow.sessionId);
+    state.mow.active=false;setView("today");
+  }
+}
 function faultModal(){
   const m=state.selected;
   modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Machine issue</div><h2>Report a problem.</h2><p class='tiny'>Capture it now. The Garage can resolve it later.</p></div><button class='close' data-action='close'>×</button></div><form id='fault-form'><div class='field'><label>Severity</label><select class='input' id='fault-severity'><option value='low'>Low</option><option value='medium' selected>Medium</option><option value='high'>High</option><option value='critical'>Critical</option></select></div><div class='field'><label>What is wrong?</label><textarea class='input' id='fault-description' rows='5' maxlength='4000' required placeholder='Describe what you noticed…'></textarea></div><button class='btn' style='width:100%'>Report problem</button></form></div></div>");
@@ -562,6 +633,16 @@ document.addEventListener("click",e=>{
   if(x==="quick-hours")return machinePicker("hours");
   if(x==="quick-service")return machinePicker("service");
   if(x==="quick-fault")return machinePicker("fault");
+  if(x==="mow"){return machinePicker("mow")}
+  if(x==="mow-pause")return pauseMow();
+  if(x==="mow-stop")return finishMow();
+  if(x==="exit-mow")return exitMow();
+  if(x==="quick-machine"){
+    state.selected=state.machines.find(v=>v.id===a.dataset.id)||null;
+    const action=state.quickAction;state.quickAction=null;closeModal();
+    if(action==="hours")return hoursModal();if(action==="service")return serviceModal();if(action==="fault")return faultModal();if(action==="mow")return startMow(state.selected.id);
+    return;
+  }
   if(x==="quick-machine"){
     state.selected=state.machines.find(v=>v.id===a.dataset.id)||null;
     const action=state.quickAction;state.quickAction=null;closeModal();
