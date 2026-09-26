@@ -496,16 +496,17 @@ async function saveHours(e){
 function serviceModal(){
   const m=state.selected;
   const options=state.serviceDue.map(x=>"<option value='"+esc(x.service_task_id)+"'>"+esc(x.task_name)+"</option>").join("");
-  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Record service</div><h2>Log maintenance.</h2><p class='tiny'>Keep the work attached to this physical machine.</p></div><button class='close' data-action='close'>×</button></div><form id='service-form'><div class='field'><label>Service task</label><select class='input' id='service-task'>"+options+"<option value=''>Other / unscheduled service</option></select></div><div class='grid two'><div class='field'><label>Date</label><input class='input' id='service-date' type='date' value='"+new Date().toISOString().slice(0,10)+"' required></div><div class='field'><label>Cost</label><input class='input' id='service-cost' type='number' min='0' step='.01' placeholder='0.00'></div></div><div class='grid two'><div class='field'><label>Engine hours</label><input class='input' id='service-engine' type='number' min='0' step='.1' value='"+esc(m.current_engine_hours??"")+"'></div><div class='field'><label>Reel hours</label><input class='input' id='service-reel' type='number' min='0' step='.1' value='"+esc(m.current_reel_hours??"")+"'></div></div><div class='field'><label>Performed by</label><input class='input' id='performed-by' placeholder='Person or company'></div><div class='field'><label>Work completed / notes</label><textarea class='input' id='service-notes' rows='4' placeholder='Oil, filters, reels, belts, inspection notes…'></textarea></div><button class='btn' style='width:100%'>Save service record</button></form></div></div>");
+  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Record service</div><h2>Log maintenance.</h2><p class='tiny'>Keep the work attached to this physical machine.</p></div><button class='close' data-action='close'>×</button></div><form id='service-form'><div class='field'><label>Service task</label><select class='input' id='service-task'>"+options+"<option value=''>Other / unscheduled service</option></select></div><div class='grid two'><div class='field'><label>Date</label><input class='input' id='service-date' type='date' value='"+new Date().toISOString().slice(0,10)+"' required></div><div class='field'><label>Cost</label><input class='input' id='service-cost' type='number' min='0' step='.01' placeholder='0.00'></div></div><div class='grid two'><div class='field'><label>Engine hours</label><input class='input' id='service-engine' type='number' min='0' step='.1' value='"+esc(m.current_engine_hours??"")+"'></div><div class='field'><label>Reel hours</label><input class='input' id='service-reel' type='number' min='0' step='.1' value='"+esc(m.current_reel_hours??"")+"'></div></div><div class='field'><label>Performed by</label><input class='input' id='performed-by' placeholder='Person or company'></div><div class='field'><label>Work completed / notes</label><textarea class='input' id='service-notes' rows='4' placeholder='Oil, filters, reels, belts, inspection notes…'></textarea></div><div class='field'><label>Evidence</label><input class='input' id='service-evidence' type='file' accept='.pdf,.jpg,.jpeg,.png,.webp'><div class='tiny' style='margin-top:5px'>Attach an invoice, service sheet or photo. Evidence uploads require an internet connection.</div></div><button class='btn' style='width:100%'>Save service record</button></form></div></div>");
   document.querySelector("#service-form").addEventListener("submit",saveService)
 }
 async function saveService(e){
-  e.preventDefault();const m=state.selected;
+  e.preventDefault();const m=state.selected,file=document.querySelector("#service-evidence")?.files?.[0];
   const task=val("#service-task")||null,date=val("#service-date"),eh=num("#service-engine"),rh=num("#service-reel"),cost=num("#service-cost"),performed=val("#performed-by"),notes=val("#service-notes");
+  if(eh!=null&&eh<0||rh!=null&&rh<0)return toast("Hours cannot be negative");
+  if(file&&!navigator.onLine)return toast("Connect to the internet to attach service evidence, then save the record.");
   if(state.demo){
-    state.serviceRecords.unshift({task_name:state.serviceDue.find(x=>x.service_task_id===task)?.task_name||"Other / unscheduled service",serviced_at:date,engine_hours:eh,reel_hours:rh,cost,notes});
-    m.current_engine_hours=Math.max(Number(m.current_engine_hours||0),Number(eh||0));
-    m.current_reel_hours=Math.max(Number(m.current_reel_hours||0),Number(rh||0));
+    state.serviceRecords.unshift({task_name:state.serviceDue.find(x=>x.service_task_id===task)?.task_name||"Other / unscheduled service",serviced_at:date,engine_hours:eh,reel_hours:rh,cost,notes,evidence:file?.name||null});
+    m.current_engine_hours=Math.max(Number(m.current_engine_hours||0),Number(eh||0));m.current_reel_hours=Math.max(Number(m.current_reel_hours||0),Number(rh||0));
     closeModal();toast("Service recorded");return renderDetail()
   }
   if(!navigator.onLine){
@@ -514,7 +515,13 @@ async function saveService(e){
     queueMutation("service",{machineId:m.id,taskId:task,serviceDate:new Date(date+"T12:00:00").toISOString(),engineHours:eh,reelHours:rh,performedBy:performed,cost,notes,evidence:{}});closeModal();return renderDetail();
   }
   try{
-    const {error}=await state.client.schema("garage").rpc("sync_record_machine_service",{operation_id:crypto.randomUUID(),target_machine:m.id,target_service_task:task,service_date:new Date(date+"T12:00:00").toISOString(),service_engine_hours:eh,service_reel_hours:rh,performed_by_name:performed||null,service_cost:cost,service_notes:notes||null,evidence_json:{}});
+    let evidence={};
+    if(file){
+      const org=state.org.id,ext=(file.name.split(".").pop()||"bin").toLowerCase(),path="org/"+org+"/machines/"+m.id+"/service-"+Date.now()+"-"+crypto.randomUUID()+"."+ext,bucket="reelmow-garage-private";
+      const up=await state.client.storage.from(bucket).upload(path,file,{contentType:file.type||"application/octet-stream",upsert:false});if(up.error)throw up.error;
+      evidence={storage_bucket:bucket,storage_path:path,file_name:file.name,mime_type:file.type||null,file_size_bytes:file.size};
+    }
+    const {error}=await state.client.schema("garage").rpc("sync_record_machine_service",{operation_id:crypto.randomUUID(),target_machine:m.id,target_service_task:task,service_date:new Date(date+"T12:00:00").toISOString(),service_engine_hours:eh,service_reel_hours:rh,performed_by_name:performed||null,service_cost:cost,service_notes:notes||null,evidence_json:evidence});
     if(error)throw error;
     closeModal();await loadMachines();state.selected=state.machines.find(x=>x.id===m.id)||m;toast("Service recorded");render();
   }catch(x){toast(x.message||"Could not save service record")}
