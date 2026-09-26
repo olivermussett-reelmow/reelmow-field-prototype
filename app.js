@@ -443,15 +443,24 @@ async function openDocument(id){
   window.open(data.signedUrl,"_blank","noopener,noreferrer")
 }
 function serviceDueHtml(){
-  if(!state.serviceDue.length)return "<div class='empty-mini'><div class='tiny'>No published service schedule for this machine yet.</div><div class='tiny' style='margin-top:5px'>REELMOW will only show maintenance rules that have been sourced and validated.</div></div>";
+  if(!state.serviceDue.length)return "<div class='empty-mini'><div class='tiny'>No published service schedule for this machine yet.</div><div class='tiny' style='margin-top:5px'>REELMOW only shows maintenance rules that have been sourced and validated.</div></div>";
   return "<div class='list'>"+state.serviceDue.map(x=>{
     const due=x.service_status==="due";
     const remaining=x.hours_remaining!=null?Math.round(Number(x.hours_remaining)*10)/10:null;
     const date=x.calendar_due_date;
     const detail=remaining!=null?(remaining<=0?"Due now":remaining+" engine hours remaining"):(date?("Due "+date):"Schedule published");
-    return "<div class='list-row'><div><div class='list-title'>"+esc(x.task_name)+"</div><div class='list-meta'>"+esc(detail)+(x.source_page?" · Manual p."+esc(x.source_page):"")+"</div></div><span class='badge "+(due?"service":"ready")+"'>"+(due?"DUE":"UPCOMING")+"</span></div>"
+    return "<button class='list-row service-task-row' data-action='service-task' data-id='"+esc(x.service_task_id||"")+"' style='width:100%;text-align:left;background:none;border:0;cursor:pointer'><div><div class='list-title'>"+esc(x.task_name)+"</div><div class='list-meta'>"+esc(detail)+(date&&remaining!=null?" · "+esc(date):"")+(x.source_page?" · Manual p."+esc(x.source_page):"")+"</div></div><span class='badge "+(due?"service":"ready")+"'>"+(due?"DUE":"UPCOMING")+"</span></button>"
   }).join("")+"</div>"
 }
+function serviceTaskModal(taskId){
+  const x=state.serviceDue.find(v=>v.service_task_id===taskId);
+  if(!x)return toast("Service task details are unavailable.");
+  const status=x.service_status==="due"?"DUE":"UPCOMING";
+  const remaining=x.hours_remaining!=null?Math.round(Number(x.hours_remaining)*10)/10:null;
+  const schedule=[x.interval_engine_hours?x.interval_engine_hours+" engine hours":null,x.interval_reel_hours?x.interval_reel_hours+" reel hours":null,x.interval_calendar_days?x.interval_calendar_days+" days":null].filter(Boolean).join(" · ");
+  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Maintenance task · "+esc(status)+"</div><h2>"+esc(x.task_name)+"</h2><p class='tiny'>"+esc(schedule||"Published maintenance requirement")+"</p></div><button class='close' data-action='close'>×</button></div><div class='note'>"+esc(x.instructions||"Follow the manufacturer maintenance instructions for this task.")+"</div>"+(x.safety_notes?"<div class='note' style='margin-top:10px'><b>Safety</b><br>"+esc(x.safety_notes)+"</div>":"")+"<div class='list' style='margin-top:14px'><div class='list-row'><div><div class='list-title'>Current engine hours</div><div class='list-meta'>"+esc(x.current_engine_hours??"Not recorded")+"</div></div></div><div class='list-row'><div><div class='list-title'>Current reel hours</div><div class='list-meta'>"+esc(x.current_reel_hours??"Not recorded")+"</div></div></div>"+(remaining!=null?"<div class='list-row'><div><div class='list-title'>Hours remaining</div><div class='list-meta'>"+esc(remaining<=0?"Due now":remaining+" engine hours")+"</div></div></div>":"")+(x.calendar_due_date?"<div class='list-row'><div><div class='list-title'>Calendar due</div><div class='list-meta'>"+esc(x.calendar_due_date)+"</div></div></div>":"")+"</div><button class='btn' style='width:100%;margin-top:14px' data-action='service'>Record this service</button></div></div>");
+}
+
 function serviceHistoryHtml(){
   if(!state.serviceRecords.length)return "<div class='empty-mini'><div class='tiny'>No service records yet.</div><button class='btn secondary small' style='margin-top:10px' data-action='service'>Record the first service</button></div>";
   return "<div class='list'>"+state.serviceRecords.map(x=>"<div class='list-row'><div><div class='list-title'>"+esc(x.task_name||"Service record")+"</div><div class='list-meta'>"+esc(new Date(x.serviced_at).toLocaleDateString())+" · "+(x.engine_hours!=null?esc(x.engine_hours)+" h":"hours not recorded")+(x.cost!=null?" · £"+Number(x.cost).toFixed(2):"")+"</div>"+(x.performed_by?"<div class='list-meta'>By "+esc(x.performed_by)+"</div>":"")+(x.notes?"<div class='list-meta' style='margin-top:4px'>"+esc(x.notes)+"</div>":"")+(x.evidence?.storage_path?"<button class='btn ghost small' style='margin-top:7px' data-action='open-service-evidence' data-id='"+esc(x.id)+"'>Open evidence</button>":"")+"</div></div>").join("")+"</div>"
@@ -746,6 +755,7 @@ document.addEventListener("click",e=>{
   if(x==="photo-upload")return evidenceUploadModal("photo");
   if(x==="open-document")return openDocument(e.target.closest("[data-id]")?.dataset.id);
   if(x==="open-service-evidence")return openServiceEvidence(e.target.closest("[data-id]")?.dataset.id);
+  if(x==="service-task")return serviceTaskModal(a.dataset.id);
   if(x==="service")return serviceModal();
   if(x==="unknown-machine")return unknownMachineModal();
   if(x==="search-identified"){const query=a.dataset.query||"";closeModal();addModal();const q=document.querySelector("#q");if(q){q.value=query;search(query);q.focus()}return}
