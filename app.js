@@ -196,8 +196,8 @@ function setView(view){
 function render(){
   if(!state.demo&&!connected())return renderConnect();
   if(!state.demo&&!state.user)return renderAuth();
+  if(!state.demo&&state.workspaceNeedsSelection)return renderWorkspacePicker();
   if(!state.demo&&!state.org)return renderOrg();
-  if(!state.demo&&state.workspaceNeedsSelection&&!state.garage)return renderWorkspacePicker();
   if(!state.demo&&!state.garage)return renderGarageSetup();
   if(state.mow.active)return renderMowScreen();
   if(state.selected)return renderDetail();
