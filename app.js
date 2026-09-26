@@ -806,11 +806,6 @@ document.addEventListener("click",e=>{
     if(action==="hours")return hoursModal();if(action==="service")return serviceModal();if(action==="fault")return faultModal();if(action==="mow")return startMow(state.selected.id);
     return;
   }
-  if(x==="quick-machine"){
-    state.selected=state.machines.find(v=>v.id===a.dataset.id)||null;
-    const action=state.quickAction;state.quickAction=null;closeModal();
-    if(action==="hours")return hoursModal();if(action==="service")return serviceModal();return faultModal();
-  }
   if(x==="resolve-fault")return resolveFaultModal(a.dataset.id);
   if(x==="ack-fault")return acknowledgeFault(a.dataset.id);
   if(x==="status")return statusTransitionModal();
