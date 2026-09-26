@@ -694,7 +694,12 @@ function editModal(){
     try{
       if(state.demo)Object.assign(m,patch);
       else{
-        const {error}=await state.client.schema("garage").from("machines").update(patch).eq("id",m.id);
+        const {error}=await state.client.schema("garage").rpc("update_machine_profile",{
+          p_machine_id:m.id,p_serial_number:patch.serial_number,p_asset_number:patch.asset_number,p_nickname:patch.nickname,
+          p_purchase_date:patch.purchase_date,p_purchase_price:patch.purchase_price,p_ownership_type:patch.ownership_type,
+          p_ownership_name:patch.ownership_name,p_warranty_start_date:patch.warranty_start_date,p_warranty_end_date:patch.warranty_end_date,
+          p_warranty_provider:patch.warranty_provider,p_notes:patch.notes
+        });
         if(error)throw error;
         await loadMachines();state.selected=state.machines.find(x=>x.id===m.id)||m;
       }
@@ -731,31 +736,35 @@ async function saveMachine(e,r){
   e.preventDefault();if(!canOperate())return toast("Your role is read-only.");
   const serial=val("#serial"),asset=val("#asset"),nickname=val("#nickname"),purchaseDate=val("#date"),purchasePrice=num("#purchase-price"),warrantyStart=val("#warranty-start"),warrantyEnd=val("#warranty-end"),warrantyProvider=val("#warranty-provider"),ownershipType=val("#ownership-type")||null,ownershipName=val("#ownership-name"),notes=val("#machine-notes"),engineHours=num("#hours"),reelHours=num("#reel");
   if(engineHours!=null&&engineHours<0||reelHours!=null&&reelHours<0){toast("Hours cannot be negative");return}
-  const p={garage_id:state.garage.id,machine_variant_id:r.variant_id,serial_number:serial||null,asset_number:asset||null,nickname:nickname||null,purchase_date:purchaseDate||null,purchase_price:purchasePrice,warranty_start_date:warrantyStart||null,warranty_end_date:warrantyEnd||null,warranty_provider:warrantyProvider||null,ownership_type:ownershipType,ownership_name:ownershipName||null,notes:notes||null,current_engine_hours:engineHours,current_reel_hours:reelHours,created_by:state.user?.id||null};
-  if(state.demo){state.machines.unshift({...p,id:crypto.randomUUID(),status:"ready",variant:{variant_name:r.variant_name},model:{model_name:r.model_name},manufacturer:{name:r.manufacturer_name}});closeModal();toast("Machine added to Garage");return render()}
+  if(state.demo){state.machines.unshift({id:crypto.randomUUID(),garage_id:state.garage.id,machine_variant_id:r.variant_id,serial_number:serial||null,asset_number:asset||null,nickname:nickname||null,purchase_date:purchaseDate||null,purchase_price:purchasePrice,current_engine_hours:engineHours,current_reel_hours:reelHours,status:"ready",variant:{variant_name:r.variant_name},model:{model_name:r.model_name},manufacturer:{name:r.manufacturer_name}});closeModal();toast("Machine added to Garage");return render()}
+  let uploadedPath=null;
   try{
-    if(serial){
-      const {data:duplicate,error:de}=await state.client.schema("garage").from("machines").select("id").eq("garage_id",state.garage.id).ilike("serial_number",serial).limit(1);
-      if(de)throw de;
-      if(duplicate?.length){throw new Error("A machine with this serial number is already in this Garage.");}
+    const machineId=crypto.randomUUID(),file=state.pendingPlateFile;
+    if(file){
+      uploadedPath="org/"+state.org.id+"/machines/"+machineId+"/"+Date.now()+"-"+crypto.randomUUID()+".jpg";
+      const resized=await imageDataUrl(file,1800,.84),blob=await (await fetch(resized)).blob();
+      const up=await state.client.storage.from("reelmow-garage-private").upload(uploadedPath,blob,{contentType:"image/jpeg",upsert:false});
+      if(up.error)throw new Error("Plate evidence could not be uploaded. The machine was not added.");
     }
-    const {data:created,error}=await state.client.schema("garage").from("machines").insert(p).select("id").single();
+    const {error}=await state.client.schema("garage").rpc("create_machine",{
+      p_machine_id:machineId,p_garage_id:state.garage.id,p_machine_variant_id:r.variant_id,
+      p_serial_number:serial||null,p_asset_number:asset||null,p_nickname:nickname||null,p_purchase_date:purchaseDate||null,
+      p_purchase_price:purchasePrice,p_warranty_start_date:warrantyStart||null,p_warranty_end_date:warrantyEnd||null,
+      p_warranty_provider:warrantyProvider||null,p_ownership_type:ownershipType,p_ownership_name:ownershipName||null,
+      p_notes:notes||null,p_current_engine_hours:engineHours,p_current_reel_hours:reelHours,
+      p_photo_bucket:uploadedPath?"reelmow-garage-private":null,p_photo_path:uploadedPath,p_photo_caption:"Machine model / serial plate",
+      p_photo_mime_type:file?.type||"image/jpeg",p_photo_file_size:file?.size||null,
+      p_photo_metadata:{source:"plate_scan",ai_confidence:state.pendingIdentification?.confidence??null,ai_reading:{
+        manufacturer:state.pendingIdentification?.manufacturer||null,model:state.pendingIdentification?.model||null,
+        variant:state.pendingIdentification?.variant||null,serial_number:state.pendingIdentification?.serial_number||null
+      }}
+    });
     if(error)throw error;
-    if(state.pendingPlateFile){
-      const file=state.pendingPlateFile,bucket="reelmow-garage-private",path="org/"+state.org.id+"/machines/"+created.id+"/"+Date.now()+"-"+crypto.randomUUID()+".jpg";
-      const resized=await imageDataUrl(file,1800,.84);
-      const blob=await (await fetch(resized)).blob();
-      const up=await state.client.storage.from(bucket).upload(path,blob,{contentType:"image/jpeg",upsert:false});
-      if(!up.error){
-        const {error:pe}=await state.client.schema("garage").from("machine_photos").insert({
-          machine_id:created.id,storage_bucket:bucket,storage_path:path,caption:"Machine model / serial plate",photo_type:"serial_plate",
-          mime_type:file.type||"image/jpeg",file_size_bytes:file.size,captured_at:new Date().toISOString(),created_by:state.user?.id||null
-        });
-        if(pe)toast("Machine added, but plate evidence could not be saved.");
-      }else toast("Machine added, but plate photo upload failed.");
-    }
-    state.pendingPlateFile=null;closeModal();await loadMachines();toast("Machine added to Garage");render()
-  }catch(x){toast(x.message||"Could not add machine")}
+    state.pendingPlateFile=null;state.pendingIdentification=null;closeModal();await loadMachines();toast("Machine added to Garage");render()
+  }catch(x){
+    if(uploadedPath)await state.client.storage.from("reelmow-garage-private").remove([uploadedPath]).catch(()=>{});
+    toast(x.message||"Could not add machine")
+  }
 }
 async function createOrg(e){
   e.preventDefault();try{const {data,error}=await state.client.schema("garage").rpc("create_organization",{org_name:val("#org-name"),org_slug:slug(val("#org-name"))+"-"+Math.random().toString(36).slice(2,7)});if(error)throw error;const {error:g}=await state.client.schema("garage").from("garages").insert({organization_id:data,name:val("#garage-name"),location_name:val("#garage-location")});if(g)throw g;await loadWorkspace();render()}catch(x){state.error=x.message;render()}
@@ -811,6 +820,11 @@ document.addEventListener("click",e=>{
   if(x==="close")return closeModal();
   if(x==="add"){state.catalogueResults=[];return addModal()}
   if(x==="select"){const r=state.catalogueResults.find(v=>v.variant_id===a.dataset.id);if(r)machineModal(r);return}
+  if(x==="accept-identified"){
+    const pending=state.pendingIdentification,candidates=pending?.candidates||[],r=candidates[Number(a.dataset.index)];
+    if(!r)return;
+    closeModal();state.pendingIdentification=pending;machineModal(r);return;
+  }
   if(x==="open"){state.selected=state.machines.find(v=>v.id===a.dataset.id)||null;state.specs=[];return render()}
   if(x==="back"||x==="home")return setView("garage");
   if(x==="edit")return editModal();
