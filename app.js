@@ -86,7 +86,8 @@ async function connect(){
   state.client.auth.onAuthStateChange((_e,s)=>{state.user=s?.user||null;render()});
 }
 async function boot(){
-  try{await connect();if(state.demo){loadDemo();return render()}if(!connected()||!state.user)return render();await loadWorkspace();render();syncOutbox()};
+  try{await connect();if(state.demo){loadDemo();return render()}if(!connected()||!state.user)return render();await loadWorkspace();render();syncOutbox()}
+  catch(e){state.error=e.message||"Unable to connect";render()}
   catch(e){state.error=e.message||"Unable to connect";render()}
 }
 async function loadWorkspace(){
