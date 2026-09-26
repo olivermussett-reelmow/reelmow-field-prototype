@@ -102,10 +102,12 @@ async function loadWorkspace(){
   const selectedOrg=state.orgs.find(x=>x.id===savedOrg)||state.orgs[0]||null;
   const orgGarages=state.garages.filter(x=>x.organization_id===selectedOrg?.id);
   const selectedGarage=orgGarages.find(x=>x.id===savedGarage)||orgGarages[0]||null;
-  state.org=selectedOrg;
+  const hasMultipleWorkspaces=state.orgs.length>1||state.garages.length>1;
+  const savedWorkspaceValid=!!savedOrg&&!!savedGarage&&!!selectedOrg&&!!selectedGarage;
+  state.org=savedWorkspaceValid?selectedOrg:(hasMultipleWorkspaces?null:selectedOrg);
   state.role=m.find(x=>x.organization_id===state.org?.id)?.role||null;
-  state.garage=selectedGarage||null;
-  state.workspaceNeedsSelection=state.orgs.length>1||orgGarages.length>1;
+  state.garage=savedWorkspaceValid?selectedGarage:(hasMultipleWorkspaces?null:selectedGarage);
+  state.workspaceNeedsSelection=hasMultipleWorkspaces&&!savedWorkspaceValid;
   if(state.org&&state.garage){
     localStorage.setItem("reelmow.workspace.org.v1",state.org.id);
     localStorage.setItem("reelmow.workspace.garage.v1",state.garage.id);
