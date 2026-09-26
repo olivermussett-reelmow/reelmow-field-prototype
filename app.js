@@ -15,7 +15,7 @@ const demoCatalogue=[
   {model_id:"demo-allett-shaver",manufacturer_name:"Allett",model_name:"Shaver",variant_id:"demo-allett-shaver-24",variant_name:"Shaver 24",machine_type:"Cylinder Mower",rank:.97},
   {model_id:"demo-atco-royale",manufacturer_name:"Atco",model_name:"Royale 24",variant_id:"demo-atco-royale-ic",variant_name:"Royale 24 I/C - F016310542",machine_type:"Cylinder Mower",rank:.96}
 ];
-const state={client:null,user:null,org:null,garage:null,offline:false,syncing:false,outboxCount:0,machines:[],selected:null,specs:[],serviceDue:[],serviceRecords:[],hoursLog:[],catalogueResults:[],dashboardDue:[],openFaults:[],machineFaults:[],activity:[],mow:{active:false,paused:false,sessionId:null,machineId:null,watchId:null,startedAt:null,lastPoint:null,trackPoints:[],distanceM:0,points:0,accuracyM:null,speedMps:null,headingDeg:null,pattern:"stripe",targetSpeedKph:null},loading:false,error:"",pendingPlateFile:null,pendingIdentification:null,quickAction:null,view:localStorage.getItem("reelmow.view.v1")||"today",demo:localStorage.getItem(DEMO_KEY)==="true" && !(window.REELMOW_CONFIG?.url && window.REELMOW_CONFIG?.key)};
+const state={client:null,user:null,org:null,garage:null,role:null,members:[],offline:false,syncing:false,outboxCount:0,machines:[],selected:null,specs:[],serviceDue:[],serviceRecords:[],hoursLog:[],catalogueResults:[],dashboardDue:[],openFaults:[],machineFaults:[],activity:[],mow:{active:false,paused:false,sessionId:null,machineId:null,watchId:null,startedAt:null,lastPoint:null,trackPoints:[],distanceM:0,points:0,accuracyM:null,speedMps:null,headingDeg:null,pattern:"stripe",targetSpeedKph:null},loading:false,error:"",pendingPlateFile:null,pendingIdentification:null,quickAction:null,view:localStorage.getItem("reelmow.view.v1")||"today",demo:localStorage.getItem(DEMO_KEY)==="true" && !(window.REELMOW_CONFIG?.url && window.REELMOW_CONFIG?.key)};
 
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const val=s=>document.querySelector(s)?.value.trim()||"";
@@ -89,14 +89,18 @@ async function boot(){
   try{await connect();if(state.demo){loadDemo();return render()}if(!connected()||!state.user)return render();await loadWorkspace();render();syncOutbox()}
   catch(e){state.error=e.message||"Unable to connect";render()}
 }
-async function loadWorkspace(){
+async async function loadWorkspace(){
   const {data:m,error:me}=await state.client.schema("garage").from("memberships").select("organization_id,role").eq("user_id",state.user.id);if(me)throw me;
-  if(!m?.length){state.org=null;state.garage=null;state.machines=[];return}
+  if(!m?.length){state.org=null;state.garage=null;state.role=null;state.members=[];state.machines=[];return}
   const ids=m.map(x=>x.organization_id);
   const {data:o,error:oe}=await state.client.schema("garage").from("organizations").select("id,name,slug,created_at").in("id",ids).order("created_at",{ascending:true});if(oe)throw oe;
-  state.org=o?.[0]||null;if(!state.org)return;
+  state.org=o?.[0]||null;
+  state.role=m.find(x=>x.organization_id===state.org?.id)?.role||null;
+  if(!state.org)return;
   const {data:g,error:ge}=await state.client.schema("garage").from("garages").select("id,name,location_name").eq("organization_id",state.org.id).order("created_at");if(ge)throw ge;
-  state.garage=g?.[0]||null;if(state.garage)await loadMachines();
+  state.garage=g?.[0]||null;
+  try{const {data:members,error:memberError}=await state.client.schema("garage").rpc("list_members");if(memberError)throw memberError;state.members=members||[]}catch{state.members=[]}
+  if(state.garage)await loadMachines();
 }
 async function loadMachines(){
   const {data,error}=await state.client.schema("garage").from("machines").select("id,garage_id,machine_variant_id,serial_number,asset_number,nickname,purchase_date,purchase_price,warranty_start_date,warranty_end_date,warranty_provider,ownership_type,ownership_name,current_engine_hours,current_reel_hours,status,notes,created_at").eq("garage_id",state.garage.id).order("created_at",{ascending:false});if(error)throw error;
@@ -229,6 +233,11 @@ function renderMowScreen(){
   const distance=(state.mow.distanceM/1000).toFixed(2);
   mount("<section class='mow-screen'><div class='mow-top'><div><div class='eyebrow'>Mow Mode</div><h1>"+esc(m?.nickname||m?.model?.model_name||"Machine")+"</h1><div class='tiny'>"+esc(m?.manufacturer?.name||"")+" · "+esc(m?.variant?.variant_name||"")+"</div></div><button class='btn ghost small' data-action='exit-mow'>Exit</button></div><div class='mow-live-card'><div class='mow-live-state'><span class='mow-live-dot "+(state.mow.paused?"paused":"")+"'></span><strong>"+(state.mow.paused?"PAUSED":"TRACKING")+"</strong><small>"+(state.mow.accuracyM!=null?"GPS ±"+Math.round(state.mow.accuracyM)+" m":"Waiting for GPS…")+"</small></div><div class='mow-metrics'><div><span>"+elapsed+"</span><small>Time</small></div><div><span>"+distance+" km</span><small>Distance</small></div><div><span>"+speed+"</span><small>Speed km/h</small></div></div><div class='mow-target'><span>Pattern</span><strong>"+esc(state.mow.pattern.replace("_"," "))+"</strong><span>Target "+(state.mow.targetSpeedKph!=null?esc(state.mow.targetSpeedKph)+" km/h":"not set")+"</span></div></div><div class='mow-map'>"+trackSvg()+"<div class='mow-crosshair'>⌖</div><div class='mow-map-copy'><strong>"+(state.mow.points?"Track recording":"Waiting for first position")+"</strong><small>"+state.mow.points+" GPS point"+(state.mow.points===1?"":"s")+" recorded</small></div></div><div class='mow-controls'><button class='btn secondary' data-action='mow-pause'>"+(state.mow.paused?"Resume":"Pause")+"</button><button class='btn mow-stop' data-action='mow-stop'>Finish mow</button></div></section>");
 }
+function roleLabel(role){return String(role||"viewer").replaceAll("_"," ").replace(/\b\w/g,c=>c.toUpperCase())}
+function canOperate(){return ["owner","admin","manager","operator"].includes(state.role)}
+function canManageTeam(){return ["owner","admin"].includes(state.role)}
+function canEditMachine(){return canOperate()}
+function canRetire(){return ["owner","admin"].includes(state.role)}
 function machinePicker(action){
   if(!state.machines.length)return setView("catalogue");
   if(state.machines.length===1){state.selected=state.machines[0];return action==="hours"?hoursModal():action==="service"?serviceModal():action==="fault"?faultModal():startMow(state.machines[0].id)}
@@ -288,8 +297,25 @@ function renderActivity(){
   mount("<section class='page-intro'><div class='eyebrow'>Activity</div><h1>What happened?</h1><p class='lede'>A single operational history for services, hours and machine issues.</p>"+(pending?"<div class='note' style='margin-top:14px'><b>"+pending+" saved change"+(pending===1?"":"s")+" waiting to sync.</b> REELMOW will retry automatically when a connection is available.</div>":"")+"</section><div id='activity-content'></div>");
 }
 function renderProfile(){
-  mount("<section class='page-intro'><div class='eyebrow'>Profile</div><h1>Your workspace.</h1><p class='lede'>Organisation, account and operating preferences.</p></section><div class='grid two' style='margin-top:20px'><div class='card'><div class='eyebrow'>Organisation</div><h2>"+esc(state.org?.name||"REELMOW Demo")+"</h2><p class='tiny'>"+esc(state.garage?.name||"Main Garage")+" · "+esc(state.garage?.location_name||"Field workspace")+"</p></div><div class='card'><div class='eyebrow'>Account</div><h2>"+esc(state.user?.email||"Demo user")+"</h2><p class='tiny'>Your REELMOW field workspace.</p></div></div>");
+  const members=state.members.length?state.members.map(x=>{
+    const controls=canManageTeam()
+      ?"<select class='input member-role' data-member-id='"+esc(x.user_id)+"' data-current-role='"+esc(x.role)+"' style='width:auto;height:40px'><option value='owner' "+(x.role==="owner"?"selected":"")+">Owner</option><option value='admin' "+(x.role==="admin"?"selected":"")+">Admin</option><option value='manager' "+(x.role==="manager"?"selected":"")+">Manager</option><option value='operator' "+(x.role==="operator"?"selected":"")+">Operator</option><option value='viewer' "+(x.role==="viewer"?"selected":"")+">Viewer</option></select>"
+      :"<span class='badge ready'>"+esc(roleLabel(x.role))+"</span>";
+    return "<div class='list-row'><div><div class='list-title'>"+esc(x.email||x.user_id)+"</div><div class='list-meta'>"+esc(x.user_id===state.user?.id?"You · ":"")+esc(roleLabel(x.role))+"</div></div>"+controls+"</div>";
+  }).join(""):"<div class='empty-mini'><div class='tiny'>No team members found.</div></div>";
+  mount("<section class='page-intro'><div class='eyebrow'>Profile</div><h1>Your workspace.</h1><p class='lede'>Organisation, account and operating permissions.</p></section><div class='grid two' style='margin-top:20px'><div class='card'><div class='eyebrow'>Organisation</div><h2>"+esc(state.org?.name||"REELMOW Demo")+"</h2><p class='tiny'>"+esc(state.garage?.name||"Main Garage")+" · "+esc(state.garage?.location_name||"Field workspace")+"</p><div class='badge ready' style='margin-top:12px'>"+esc(roleLabel(state.role))+"</div></div><div class='card'><div class='eyebrow'>Account</div><h2>"+esc(state.user?.email||"Demo user")+"</h2><p class='tiny'>Your REELMOW field workspace.</p></div></div><div class='card' style='margin-top:15px'><div class='section-head' style='margin:0 0 8px'><div><div class='eyebrow'>Team</div><h2>Garage permissions</h2></div></div><p class='tiny'>Owner and Admin can change roles. Operational users can record field activity; Viewers are read-only.</p><div class='list'>"+members+"</div></div>");
 }
+async function changeMemberRole(userId,role){
+  if(!canManageTeam())return toast("You do not have permission to change member roles");
+  try{
+    const {error}=await state.client.schema("garage").rpc("change_member_role",{p_user_id:userId,p_role:role});
+    if(error)throw error;
+    const {data:members,error:me}=await state.client.schema("garage").rpc("list_members");if(me)throw me;state.members=members||[];
+    state.role=state.members.find(x=>x.user_id===state.user?.id)?.role||state.role;
+    toast("Member role updated");render();
+  }catch(x){toast(x.message||"Could not change member role");render()}
+}
+
 function renderCataloguePage(){
   mount("<section class='page-intro'><div class='eyebrow'>Catalogue</div><h1>Find a machine.</h1><p class='lede'>Start with verified manufacturer, model and variant data.</p></section><div class='card' style='margin-top:20px'><button class='btn' data-action='add'>Search catalogue</button><button class='btn secondary' style='margin-left:8px' data-action='unknown-machine'>Scan model plate</button></div>");
 }
@@ -438,7 +464,8 @@ async function loadEvidence(m){
   const pb=document.querySelector("#machine-photos");if(pb)pb.innerHTML=photosHtml();
 }
 function evidenceUploadModal(kind){
-  const m=state.selected;
+  const m=state.selected;if(!canOperate())return toast("Your role is read-only.");
+
   const isPhoto=kind==="photo";
   modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>"+(isPhoto?"Machine photo":"Machine document")+"</div><h2>"+(isPhoto?"Capture evidence.":"Attach a document.")+"</h2><p class='tiny'>Files are stored privately against this physical machine.</p></div><button class='close' data-action='close'>×</button></div><form id='evidence-form'><div class='field'><label>File</label><input class='input' id='evidence-file' type='file' "+(isPhoto?"accept='image/*' capture='environment'":"accept='.pdf,.jpg,.jpeg,.png,.webp,.doc,.docx'")+" required></div><div class='field'><label>"+(isPhoto?"Caption":"Title")+"</label><input class='input' id='evidence-title' placeholder='"+(isPhoto?"e.g. Serial plate":"e.g. Service invoice")+"' required></div>"+(isPhoto?"<div class='field'><label>Photo type</label><select class='input' id='photo-type'><option value='machine'>Machine</option><option value='serial_plate'>Serial / model plate</option><option value='service_evidence'>Service evidence</option><option value='damage'>Damage / issue</option></select></div>":"<div class='field'><label>Document type</label><select class='input' id='document-type'><option value='service_record'>Service record</option><option value='invoice'>Invoice</option><option value='manual'>Manual</option><option value='other'>Other</option></select></div>")+"<button class='btn' style='width:100%'>Upload</button></form></div></div>");
   document.querySelector("#evidence-form").addEventListener("submit",e=>saveEvidence(e,kind))
@@ -529,7 +556,8 @@ async function loadServiceData(m){
   const hist=document.querySelector("#service-history");if(hist)hist.innerHTML=serviceHistoryHtml();
 }
 function hoursModal(){
-  const m=state.selected;
+  const m=state.selected;if(!canOperate())return toast("Your role is read-only.");
+
   modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Machine hours</div><h2>Update the meter.</h2><p class='tiny'>Hours readings drive the service schedule.</p></div><button class='close' data-action='close'>×</button></div><form id='hours-form'><div class='grid two'><div class='field'><label>Engine hours</label><input class='input' id='new-engine-hours' type='number' min='"+esc(m.current_engine_hours??0)+"' step='.1' value='"+esc(m.current_engine_hours??"")+"'></div><div class='field'><label>Reel hours</label><input class='input' id='new-reel-hours' type='number' min='"+esc(m.current_reel_hours??0)+"' step='.1' value='"+esc(m.current_reel_hours??"")+"'></div></div><div class='field'><label>Notes</label><textarea class='input' id='hours-notes' rows='3' placeholder='Optional reading note'></textarea></div><button class='btn' style='width:100%'>Save hours</button></form></div></div>");
   document.querySelector("#hours-form").addEventListener("submit",saveHours)
 }
@@ -545,7 +573,8 @@ async function saveHours(e){
   }catch(x){if(!navigator.onLine){m.current_engine_hours=eh;m.current_reel_hours=rh;queueMutation("hours",{machineId:m.id,engineHours:eh,reelHours:rh,notes,source:"manual"});return renderDetail()}toast(x.message||"Could not save hours")}
 }
 function serviceModal(){
-  const m=state.selected;
+  const m=state.selected;if(!canOperate())return toast("Your role is read-only.");
+
   const options=state.serviceDue.map(x=>"<option value='"+esc(x.service_task_id)+"'>"+esc(x.task_name)+"</option>").join("");
   modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Record service</div><h2>Log maintenance.</h2><p class='tiny'>Keep the work attached to this physical machine.</p></div><button class='close' data-action='close'>×</button></div><form id='service-form'><div class='field'><label>Service task</label><select class='input' id='service-task'>"+options+"<option value=''>Other / unscheduled service</option></select></div><div class='grid two'><div class='field'><label>Date</label><input class='input' id='service-date' type='date' value='"+new Date().toISOString().slice(0,10)+"' required></div><div class='field'><label>Cost</label><input class='input' id='service-cost' type='number' min='0' step='.01' placeholder='0.00'></div></div><div class='grid two'><div class='field'><label>Engine hours</label><input class='input' id='service-engine' type='number' min='0' step='.1' value='"+esc(m.current_engine_hours??"")+"'></div><div class='field'><label>Reel hours</label><input class='input' id='service-reel' type='number' min='0' step='.1' value='"+esc(m.current_reel_hours??"")+"'></div></div><div class='field'><label>Performed by</label><input class='input' id='performed-by' placeholder='Person or company'></div><div class='field'><label>Work completed / notes</label><textarea class='input' id='service-notes' rows='4' placeholder='Oil, filters, reels, belts, inspection notes…'></textarea></div><div class='field'><label>Evidence</label><input class='input' id='service-evidence' type='file' accept='.pdf,.jpg,.jpeg,.png,.webp'><div class='tiny' style='margin-top:5px'>Attach an invoice, service sheet or photo. Evidence uploads require an internet connection.</div></div><button class='btn' style='width:100%'>Save service record</button></form></div></div>");
   document.querySelector("#service-form").addEventListener("submit",saveService)
@@ -656,7 +685,8 @@ function exitMow(){
   }
 }
 function faultModal(){
-  const m=state.selected;
+  const m=state.selected;if(!canOperate())return toast("Your role is read-only.");
+
   modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Machine issue</div><h2>Report a problem.</h2><p class='tiny'>Capture it now. The Garage can resolve it later.</p></div><button class='close' data-action='close'>×</button></div><form id='fault-form'><div class='field'><label>Severity</label><select class='input' id='fault-severity'><option value='low'>Low</option><option value='medium' selected>Medium</option><option value='high'>High</option><option value='critical'>Critical</option></select></div><div class='field'><label>What is wrong?</label><textarea class='input' id='fault-description' rows='5' maxlength='4000' required placeholder='Describe what you noticed…'></textarea></div><button class='btn' style='width:100%'>Report problem</button></form></div></div>");
   document.querySelector("#fault-form").addEventListener("submit",async e=>{
     e.preventDefault();
@@ -672,14 +702,15 @@ function faultModal(){
   });
 }
 function editModal(){
-  const m=state.selected;
-  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Machine profile</div><h2>Edit machine.</h2><p class='tiny'>Keep the physical asset record complete.</p></div><button class='close' data-action='close'>×</button></div><form id='edit-machine'><div class='field'><label>Nickname</label><input class='input' id='edit-nickname' value='"+esc(m.nickname||"")+"' maxlength='80'></div><div class='grid two'><div class='field'><label>Serial number</label><input class='input' id='edit-serial' value='"+esc(m.serial_number||"")+"' maxlength='120'></div><div class='field'><label>Asset number</label><input class='input' id='edit-asset' value='"+esc(m.asset_number||"")+"' maxlength='80'></div></div><div class='grid two'><div class='field'><label>Purchase date</label><input class='input' id='edit-date' type='date' value='"+esc(m.purchase_date||"")+"'></div><div class='field'><label>Purchase price</label><input class='input' id='edit-price' type='number' min='0' step='.01' value='"+esc(m.purchase_price??"")+"'></div></div><div class='field'><label>Status</label><select class='input' id='edit-status'><option value='ready'>Ready</option><option value='service_due'>Service due</option><option value='in_service'>In service</option><option value='out_of_service'>Out of service</option><option value='retired'>Retired</option></select></div><div class='field'><label>Ownership</label><select class='input' id='edit-ownership'><option value=''>Not specified</option><option value='owned'>Owned</option><option value='leased'>Leased</option><option value='hired'>Hired</option><option value='loaned'>Loaned</option><option value='other'>Other</option></select></div><div class='field'><label>Owner / supplier</label><input class='input' id='edit-owner' value='"+esc(m.ownership_name||"")+"'></div><div class='grid two'><div class='field'><label>Warranty start</label><input class='input' id='edit-warranty-start' type='date' value='"+esc(m.warranty_start_date||"")+"'></div><div class='field'><label>Warranty end</label><input class='input' id='edit-warranty-end' type='date' value='"+esc(m.warranty_end_date||"")+"'></div></div><div class='field'><label>Warranty provider</label><input class='input' id='edit-warranty-provider' value='"+esc(m.warranty_provider||"")+"'></div><div class='field'><label>Notes</label><textarea class='input' id='edit-notes' rows='4' maxlength='2000'>"+esc(m.notes||"")+"</textarea></div><button class='btn' style='width:100%'>Save changes</button></form></div></div>");
-  document.querySelector("#edit-status").value=m.status||"ready";document.querySelector("#edit-ownership").value=m.ownership_type||"";
+  const m=state.selected;if(!canEditMachine())return toast("Your role is read-only.");
+
+  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Machine profile</div><h2>Edit machine.</h2><p class='tiny'>Keep the physical asset record complete.</p></div><button class='close' data-action='close'>×</button></div><form id='edit-machine'><div class='field'><label>Nickname</label><input class='input' id='edit-nickname' value='"+esc(m.nickname||"")+"' maxlength='80'></div><div class='grid two'><div class='field'><label>Serial number</label><input class='input' id='edit-serial' value='"+esc(m.serial_number||"")+"' maxlength='120'></div><div class='field'><label>Asset number</label><input class='input' id='edit-asset' value='"+esc(m.asset_number||"")+"' maxlength='80'></div></div><div class='grid two'><div class='field'><label>Purchase date</label><input class='input' id='edit-date' type='date' value='"+esc(m.purchase_date||"")+"'></div><div class='field'><label>Purchase price</label><input class='input' id='edit-price' type='number' min='0' step='.01' value='"+esc(m.purchase_price??"")+"'></div></div><div class='note' style='margin-bottom:14px'>Operational status is managed separately so every change follows the Garage lifecycle.</div><div class='field'><label>Ownership</label><select class='input' id='edit-ownership'><option value=''>Not specified</option><option value='owned'>Owned</option><option value='leased'>Leased</option><option value='hired'>Hired</option><option value='loaned'>Loaned</option><option value='other'>Other</option></select></div><div class='field'><label>Owner / supplier</label><input class='input' id='edit-owner' value='"+esc(m.ownership_name||"")+"'></div><div class='grid two'><div class='field'><label>Warranty start</label><input class='input' id='edit-warranty-start' type='date' value='"+esc(m.warranty_start_date||"")+"'></div><div class='field'><label>Warranty end</label><input class='input' id='edit-warranty-end' type='date' value='"+esc(m.warranty_end_date||"")+"'></div></div><div class='field'><label>Warranty provider</label><input class='input' id='edit-warranty-provider' value='"+esc(m.warranty_provider||"")+"'></div><div class='field'><label>Notes</label><textarea class='input' id='edit-notes' rows='4' maxlength='2000'>"+esc(m.notes||"")+"</textarea></div><button class='btn' style='width:100%'>Save changes</button></form></div></div>");
+  document.querySelector("#edit-ownership").value=m.ownership_type||"";
   document.querySelector("#edit-machine").addEventListener("submit",async e=>{
     e.preventDefault();const serial=val("#edit-serial"),price=num("#edit-price");
     if(price!=null&&price<0)return toast("Purchase price cannot be negative");
     if(!state.demo&&serial){const {data,error}=await state.client.schema("garage").from("machines").select("id").eq("garage_id",state.garage.id).ilike("serial_number",serial).neq("id",m.id).limit(1);if(error)return toast(error.message);if(data?.length)return toast("A machine with this serial number is already in this Garage.")}
-    const patch={serial_number:serial||null,nickname:val("#edit-nickname")||null,asset_number:val("#edit-asset")||null,purchase_date:val("#edit-date")||null,purchase_price:price,status:val("#edit-status"),ownership_type:val("#edit-ownership")||null,ownership_name:val("#edit-owner")||null,warranty_start_date:val("#edit-warranty-start")||null,warranty_end_date:val("#edit-warranty-end")||null,warranty_provider:val("#edit-warranty-provider")||null,notes:val("#edit-notes")||null,updated_at:new Date().toISOString()};
+    const patch={serial_number:serial||null,nickname:val("#edit-nickname")||null,asset_number:val("#edit-asset")||null,purchase_date:val("#edit-date")||null,purchase_price:price,ownership_type:val("#edit-ownership")||null,ownership_name:val("#edit-owner")||null,warranty_start_date:val("#edit-warranty-start")||null,warranty_end_date:val("#edit-warranty-end")||null,warranty_provider:val("#edit-warranty-provider")||null,notes:val("#edit-notes")||null,updated_at:new Date().toISOString()};
     try{if(state.demo)Object.assign(m,patch);else{const {error}=await state.client.schema("garage").from("machines").update(patch).eq("id",m.id);if(error)throw error;await loadMachines();state.selected=state.machines.find(x=>x.id===m.id)||m}closeModal();toast("Machine profile updated");render()}catch(x){toast(x.message||"Could not update machine")}
   });
 }
@@ -758,14 +789,15 @@ function loadDemo(){
   state.garage={id:"demo-garage",name:"Main Garage",location_name:"Club Grounds"};
   if(!state.machines.length)state.machines=[{id:"demo-lf3800",garage_id:"demo-garage",machine_variant_id:demoCatalogue[0].variant_id,serial_number:"DEMO-LF3800",asset_number:"BTCC-001",nickname:"Main Outfield Mower",purchase_date:"2025-03-14",current_engine_hours:1284.5,current_reel_hours:642.2,status:"ready",variant:{variant_name:"LF3800 5-Gang"},model:{model_name:"LF3800"},manufacturer:{name:"Jacobsen"}}]
 }
+document.addEventListener("change",e=>{const roleSelect=e.target.closest(".member-role");if(roleSelect){const id=roleSelect.dataset.memberId;const role=roleSelect.value;if(role!==roleSelect.dataset.currentRole)changeMemberRole(id,role)}});
 document.addEventListener("click",e=>{
   const a=e.target.closest("[data-action]");if(!a)return;
   const x=a.dataset.action;
   if(["today","garage","catalogue","activity","profile"].includes(x))return setView(x);
-  if(x==="quick-add")return setView("catalogue");
-  if(x==="quick-hours")return machinePicker("hours");
-  if(x==="quick-service")return machinePicker("service");
-  if(x==="quick-fault")return machinePicker("fault");
+  if(x==="quick-add")return canOperate()?setView("catalogue"):toast("Your role is read-only.");
+  if(x==="quick-hours")return canOperate()?machinePicker("hours"):toast("Your role is read-only.");
+  if(x==="quick-service")return canOperate()?machinePicker("service"):toast("Your role is read-only.");
+  if(x==="quick-fault")return canOperate()?machinePicker("fault"):toast("Your role is read-only.");
   if(x==="mow"){return machinePicker("mow")}
   if(x==="mow-pause")return pauseMow();
   if(x==="mow-stop")return finishMow();
@@ -781,21 +813,21 @@ document.addEventListener("click",e=>{
     const action=state.quickAction;state.quickAction=null;closeModal();
     if(action==="hours")return hoursModal();if(action==="service")return serviceModal();return faultModal();
   }
-  if(x==="resolve-fault")return resolveFaultModal(a.dataset.id);
-  if(x==="ack-fault")return acknowledgeFault(a.dataset.id);
-  if(x==="status")return statusTransitionModal();
-  if(x==="set-status")return setMachineStatus(a.dataset.status);
+  if(x==="resolve-fault"){if(!canOperate())return toast("Your role is read-only.");return resolveFaultModal(a.dataset.id);}
+  if(x==="ack-fault"){if(!canOperate())return toast("Your role is read-only.");return acknowledgeFault(a.dataset.id);}
+  if(x==="status"){if(!canOperate())return toast("Your role is read-only.");return statusTransitionModal();}
+  if(x==="set-status"){if(!canOperate())return toast("Your role is read-only.");if(a.dataset.status==="retired"&&!canRetire())return toast("Only an Owner or Admin can retire a machine.");return setMachineStatus(a.dataset.status);}
   if(x==="connection")return connectionModal();
   if(x==="demo"){state.demo=true;localStorage.setItem(DEMO_KEY,"true");loadDemo();closeModal();return render()}
   if(x==="close")return closeModal();
-  if(x==="add"){state.catalogueResults=[];return addModal()}
-  if(x==="select"){const r=state.catalogueResults.find(v=>v.variant_id===a.dataset.id);if(r)machineModal(r);return}
+  if(x==="add"){if(!canOperate())return toast("Your role is read-only.");state.catalogueResults=[];return addModal()}
+  if(x==="select"){if(!canOperate())return toast("Your role is read-only.");const r=state.catalogueResults.find(v=>v.variant_id===a.dataset.id);if(r)machineModal(r);return}
   if(x==="open"){state.selected=state.machines.find(v=>v.id===a.dataset.id)||null;state.specs=[];return render()}
   if(x==="back"||x==="home")return setView("garage");
-  if(x==="edit")return editModal();
+  if(x==="edit"){if(!canEditMachine())return toast("Your role is read-only.");return editModal();}
   if(x==="hours")return hoursModal();
-  if(x==="document-upload")return evidenceUploadModal("document");
-  if(x==="photo-upload")return evidenceUploadModal("photo");
+  if(x==="document-upload")return canOperate()?evidenceUploadModal("document"):toast("Your role is read-only.");
+  if(x==="photo-upload")return canOperate()?evidenceUploadModal("photo"):toast("Your role is read-only.");
   if(x==="open-document")return openDocument(e.target.closest("[data-id]")?.dataset.id);
   if(x==="open-service-evidence")return openServiceEvidence(e.target.closest("[data-id]")?.dataset.id);
   if(x==="service-task")return serviceTaskModal(a.dataset.id);
