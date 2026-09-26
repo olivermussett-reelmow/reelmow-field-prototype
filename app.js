@@ -590,6 +590,7 @@ function faultModal(){
     const description=val("#fault-description"), severity=val("#fault-severity");
     try{
       if(state.demo){closeModal();toast("Problem reported");return}
+      if(!description){toast("Please describe the problem");return}
       if(!navigator.onLine){closeModal();queueMutation("fault",{machineId:m.id,severity,description});return}
       const {error}=await state.client.schema("garage").rpc("sync_report_machine_fault",{operation_id:crypto.randomUUID(),target_machine:m.id,target_severity:severity,target_description:description});
       if(error)throw error;
@@ -599,13 +600,13 @@ function faultModal(){
 }
 function editModal(){
   const m=state.selected;
-  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Machine details</div><h2>Edit machine.</h2><p class='tiny'>Update the physical asset record. Catalogue identity remains fixed.</p></div><button class='close' data-action='close'>×</button></div><form id='edit-machine'><div class='field'><label>Nickname</label><input class='input' id='edit-nickname' value='"+esc(m.nickname||"")+"' maxlength='80'></div><div class='field'><label>Asset number</label><input class='input' id='edit-asset' value='"+esc(m.asset_number||"")+"' maxlength='80'></div><div class='field'><label>Purchase date</label><input class='input' id='edit-date' type='date' value='"+esc(m.purchase_date||"")+"' ></div><div class='field'><label>Status</label><select class='input' id='edit-status'><option value='ready'>Ready</option><option value='service_due'>Service due</option><option value='in_service'>In service</option><option value='out_of_service'>Out of service</option><option value='retired'>Retired</option></select></div><div class='field'><label>Notes</label><textarea class='input' id='edit-notes' rows='4' maxlength='2000'>"+esc(m.notes||"")+"</textarea></div><button class='btn' style='width:100%'>Save changes</button></form></div></div>");
+  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Machine details</div><h2>Edit machine.</h2><p class='tiny'>Update the physical asset record. Catalogue identity remains fixed.</p></div><button class='close' data-action='close'>×</button></div><form id='edit-machine'><div class='field'><label>Serial number</label><input class='input' id='edit-serial' value='"+esc(m.serial_number||"")+"' maxlength='120'></div><div class='field'><label>Nickname</label><input class='input' id='edit-nickname' value='"+esc(m.nickname||"")+"' maxlength='80'></div><div class='field'><label>Asset number</label><input class='input' id='edit-asset' value='"+esc(m.asset_number||"")+"' maxlength='80'></div><div class='field'><label>Purchase date</label><input class='input' id='edit-date' type='date' value='"+esc(m.purchase_date||"")+"' ></div><div class='field'><label>Status</label><select class='input' id='edit-status'><option value='ready'>Ready</option><option value='service_due'>Service due</option><option value='in_service'>In service</option><option value='out_of_service'>Out of service</option><option value='retired'>Retired</option></select></div><div class='field'><label>Notes</label><textarea class='input' id='edit-notes' rows='4' maxlength='2000'>"+esc(m.notes||"")+"</textarea></div><button class='btn' style='width:100%'>Save changes</button></form></div></div>");
   document.querySelector("#edit-status").value=m.status||"ready";
   document.querySelector("#edit-machine").addEventListener("submit",async e=>{
     e.preventDefault();
     if(state.demo){Object.assign(m,{nickname:val("#edit-nickname"),asset_number:val("#edit-asset"),purchase_date:val("#edit-date")||null,status:val("#edit-status"),notes:val("#edit-notes")});closeModal();toast("Machine updated");return render()}
     try{
-      const {error}=await state.client.schema("garage").from("machines").update({nickname:val("#edit-nickname"),asset_number:val("#edit-asset"),purchase_date:val("#edit-date")||null,status:val("#edit-status"),notes:val("#edit-notes"),updated_at:new Date().toISOString()}).eq("id",m.id);
+      const {error}=await state.client.schema("garage").from("machines").update({serial_number:val("#edit-serial"),nickname:val("#edit-nickname"),asset_number:val("#edit-asset"),purchase_date:val("#edit-date")||null,status:val("#edit-status"),notes:val("#edit-notes"),updated_at:new Date().toISOString()}).eq("id",m.id);
       if(error)throw error;
       closeModal();await loadMachines();state.selected=state.machines.find(x=>x.id===m.id)||m;toast("Machine updated");render();
     }catch(x){toast(x.message||"Could not update machine")}
@@ -634,14 +635,23 @@ async function identifyPlate(file){
 }
 async function saveMachine(e,r){
   e.preventDefault();
-  const p={garage_id:state.garage.id,machine_variant_id:r.variant_id,serial_number:val("#serial"),asset_number:val("#asset"),nickname:val("#nickname"),purchase_date:val("#date")||null,current_engine_hours:num("#hours"),current_reel_hours:num("#reel"),created_by:state.user?.id||null};
+  const serial=val("#serial"),asset=val("#asset"),nickname=val("#nickname"),purchaseDate=val("#date"),engineHours=num("#hours"),reelHours=num("#reel");
+  if(engineHours!=null&&engineHours<0||reelHours!=null&&reelHours<0){toast("Hours cannot be negative");return}
+  const p={garage_id:state.garage.id,machine_variant_id:r.variant_id,serial_number:serial||null,asset_number:asset||null,nickname:nickname||null,purchase_date:purchaseDate||null,current_engine_hours:engineHours,current_reel_hours:reelHours,created_by:state.user?.id||null};
   if(state.demo){state.machines.unshift({...p,id:crypto.randomUUID(),status:"ready",variant:{variant_name:r.variant_name},model:{model_name:r.model_name},manufacturer:{name:r.manufacturer_name}});closeModal();toast("Machine added to Garage");return render()}
   try{
+    if(serial){
+      const {data:duplicate,error:de}=await state.client.schema("garage").from("machines").select("id").eq("garage_id",state.garage.id).ilike("serial_number",serial).limit(1);
+      if(de)throw de;
+      if(duplicate?.length){throw new Error("A machine with this serial number is already in this Garage.");}
+    }
     const {data:created,error}=await state.client.schema("garage").from("machines").insert(p).select("id").single();
     if(error)throw error;
     if(state.pendingPlateFile){
       const file=state.pendingPlateFile,bucket="reelmow-garage-private",path="org/"+state.org.id+"/machines/"+created.id+"/"+Date.now()+"-"+crypto.randomUUID()+".jpg";
-      const up=await state.client.storage.from(bucket).upload(path,file,{contentType:file.type||"image/jpeg",upsert:false});
+      const resized=await imageDataUrl(file,1800,.84);
+      const blob=await (await fetch(resized)).blob();
+      const up=await state.client.storage.from(bucket).upload(path,blob,{contentType:"image/jpeg",upsert:false});
       if(!up.error){
         const {error:pe}=await state.client.schema("garage").from("machine_photos").insert({
           machine_id:created.id,storage_bucket:bucket,storage_path:path,caption:"Machine model / serial plate",photo_type:"serial_plate",
