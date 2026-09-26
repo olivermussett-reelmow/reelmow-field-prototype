@@ -689,7 +689,15 @@ function editModal(){
     if(price!=null&&price<0)return toast("Purchase price cannot be negative");
     if(!state.demo&&serial){const {data,error}=await state.client.schema("garage").from("machines").select("id").eq("garage_id",state.garage.id).ilike("serial_number",serial).neq("id",m.id).limit(1);if(error)return toast(error.message);if(data?.length)return toast("A machine with this serial number is already in this Garage.")}
     const patch={serial_number:serial||null,nickname:val("#edit-nickname")||null,asset_number:val("#edit-asset")||null,purchase_date:val("#edit-date")||null,purchase_price:price,ownership_type:val("#edit-ownership")||null,ownership_name:val("#edit-owner")||null,warranty_start_date:val("#edit-warranty-start")||null,warranty_end_date:val("#edit-warranty-end")||null,warranty_provider:val("#edit-warranty-provider")||null,notes:val("#edit-notes")||null,updated_at:new Date().toISOString()};
-    try{if(state.demo)Object.assign(m,patch);else{const {error}=await state.client.schema("garage").from("machines").update(patch).eq("id",m.id);if(error)throw error;await loadMachines();state.selected=state.machines.find(x=>x.id===m.id)||m}closeModal();toast("Machine profile updated");render()}catch(x){toast(x.message||"Could not update machine")}
+    try{
+      if(state.demo)Object.assign(m,patch);
+      else{
+        const {error}=await state.client.schema("garage").from("machines").update(patch).eq("id",m.id);
+        if(error)throw error;
+        await loadMachines();state.selected=state.machines.find(x=>x.id===m.id)||m;
+      }
+      closeModal();toast("Machine profile updated");render()
+    }catch(x){toast(x.message||"Could not update machine")}
   });
 }
 function machineModal(r){
