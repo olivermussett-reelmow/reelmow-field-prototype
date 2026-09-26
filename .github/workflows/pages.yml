@@ -57,7 +57,7 @@ jobs:
           const fs = require('fs');
           const text = fs.readFileSync('reelmow.config.js','utf8');
           if (!text.includes('window.REELMOW_CONFIG')) throw new Error('Runtime config was not generated correctly');
-          const prefix = 'window.REELMOW_CONFIG = ';\n          if (!text.startsWith(prefix)) throw new Error('Runtime config payload missing');\n          const payload = text.slice(prefix.length).trim().replace(/;\\s*$/, '');\n          const cfg = JSON.parse(payload);
+          const prefix = 'window.REELMOW_CONFIG = ';
           if (!cfg.url || !cfg.key) throw new Error('Supabase runtime configuration is empty');
           console.log('Runtime configuration verified for artifact:', cfg.url);
           NODE
