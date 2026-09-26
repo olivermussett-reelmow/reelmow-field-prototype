@@ -357,7 +357,7 @@ function renderDetail(){
     <div class="card" style="margin-top:15px"><div class="eyebrow">Faults & repairs</div><h2>Problems and resolution</h2><div id="machine-faults"><div class="loading"><div class="spinner"></div>Loading fault history…</div></div></div>
     <div class="card" style="margin-top:15px"><div class="eyebrow">Documents</div><h2>Machine knowledge</h2><div class="actions" style="margin:10px 0"><button class="btn secondary small" data-action="document-upload">Add document</button></div><div id="machine-documents"><div class="loading"><div class="spinner"></div>Loading documents…</div></div></div>
     <div class="card" style="margin-top:15px"><div class="eyebrow">Photos</div><h2>Machine evidence</h2><div class="actions" style="margin:10px 0"><button class="btn secondary small" data-action="photo-upload">Take / add photo</button></div><div id="machine-photos"><div class="loading"><div class="spinner"></div>Loading photos…</div></div></div>
-  </div></div>${pending?`<div class="note" style="margin:15px 0"><b>${pending} change${pending===1?"":"s"} saved on this device.</b> It will sync automatically when online.</div>`:""}`);
+  </div></div>${pending ? '<div class="note" style="margin:15px 0"><b>'+pending+' change'+(pending===1?'':'s')+' saved on this device.</b> It will sync automatically when online.</div>' : ''}`);
   loadSpecs(m);loadServiceData(m);loadEvidence(m);loadMachineFaults(m);
 }
 
