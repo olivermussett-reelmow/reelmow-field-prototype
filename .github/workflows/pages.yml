@@ -47,7 +47,7 @@ jobs:
           const fs = require('fs');
           const url = process.env.SUPABASE_URL || '';
           const key = process.env.SUPABASE_PUBLISHABLE_KEY || '';
-          const js = 'window.REELMOW_CONFIG = ' + JSON.stringify({ url, key }) + ';\\n';
+          const js = 'window.REELMOW_CONFIG = ' + JSON.stringify({ url, key }) + ';\n';
           fs.writeFileSync('reelmow.config.js', js, 'utf8');
           NODE
           test -n "$SUPABASE_URL"
