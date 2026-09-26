@@ -593,20 +593,22 @@ function addModal(){
   q.focus()
 }
 function unknownMachineModal(){
-  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Catalogue assistant</div><h2>Scan the model plate.</h2><p class='tiny'>REELMOW reads visible manufacturer, model and serial text. You remain in control before a machine is added.</p></div><button class='close' data-action='close'>×</button></div><div class='field'><label>Model / rating plate photo</label><input class='input' id='unknown-plate' type='file' accept='image/*' capture='environment'></div><div id='unknown-result' class='empty-mini'><div class='tiny'>Take a clear, close photo of the plate in good light.</div></div><div class='catalogue-help' style='margin-top:14px'><b>Nothing readable?</b><span>You can return to search and enter the manufacturer or model manually.</span><button class='btn secondary small' data-action='close'>Back to search</button></div></div></div>");
+  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Catalogue assistant</div><h2>Scan the machine plate.</h2><p class='tiny'>REELMOW reads the plate with AI, then matches the reading against the verified REELMOW catalogue. You confirm the machine before it is added.</p></div><button class='close' data-action='close'>×</button></div><div class='field'><label>Model / serial plate photo</label><input class='input' id='unknown-plate' type='file' accept='image/*' capture='environment'></div><div id='unknown-result' class='empty-mini'><div class='tiny'>Take a clear, close photo of the plate in good light.</div></div><div class='catalogue-help' style='margin-top:14px'><b>Nothing readable?</b><span>You can return to search and enter the manufacturer or model manually.</span><button class='btn secondary small' data-action='close'>Back to search</button></div></div></div>");
   document.querySelector("#unknown-plate").addEventListener("change",async e=>{
     const file=e.target.files?.[0];if(!file)return;
     state.pendingIdentification=null;
-    const box=document.querySelector("#unknown-result");box.innerHTML="<div class='loading' style='padding:22px 5px'><div class='spinner'></div>Reading the plate…</div>";
-    if(state.demo){box.innerHTML="<div class='note'><b>Demo scan:</b> Try searching Protea SC610, Allett Shaver 24 or ATCO Royale 24 in the catalogue.</div>";return}
+    const box=document.querySelector("#unknown-result");box.innerHTML="<div class='loading' style='padding:22px 5px'><div class='spinner'></div>Reading plate and checking catalogue…</div>";
+    if(state.demo){box.innerHTML="<div class='note'><b>Demo scan:</b> In live mode REELMOW reads the plate, matches it against the catalogue and asks you to confirm the suggested variant.</div>";return}
     try{
       const data=await imageDataUrl(file);
       const {data:result,error}=await state.client.functions.invoke("identify-machine",{body:{image_data_url:data}});
       if(error)throw error;if(result?.error)throw new Error(result.error);
-      const query=[result.manufacturer,result.model,result.variant].filter(Boolean).join(" ").trim();
-      state.pendingIdentification={serial_number:result.serial_number||null,manufacturer:result.manufacturer||null,model:result.model||null,variant:result.variant||null,confidence:Number(result.confidence||0),plateFile:file};
+      const candidates=await matchPlateIdentification(result);
+      state.pendingIdentification={serial_number:result.serial_number||null,manufacturer:result.manufacturer||null,product_family:result.product_family||null,model:result.model||null,variant:result.variant||null,visible_text:result.visible_text||"",confidence:Number(result.confidence||0),uncertainty:result.uncertainty||"",plateFile:file,candidates};
       const confidence=Math.round(Number(result.confidence||0)*100);
-      box.innerHTML="<div class='note'><b>Plate read:</b> "+esc(query||"No model identified")+"<br>Confidence "+confidence+"%"+(result.serial_number?" · Serial "+esc(result.serial_number):"")+"</div>"+(query?"<button class='btn' style='width:100%;margin-top:10px' data-action='search-identified' data-query='"+esc(query)+"'>Search catalogue</button>":"");
+      const read="<div class='note'><b>AI plate reading</b><br>"+esc([result.manufacturer,result.product_family,result.model,result.variant].filter(Boolean).join(" · ")||"No model identified")+"<br>Serial "+esc(result.serial_number||"Not read")+" · AI confidence "+confidence+"%"+(result.uncertainty?"<br>"+esc(result.uncertainty):"")+"</div>";
+      const list=candidates.length?candidates.map((x,i)=>identificationCard(x,i)).join(""):"<div class='empty-mini'><b>No verified catalogue match.</b><div class='tiny' style='margin-top:5px'>Check the plate reading and search the catalogue manually. Do not add an unverified variant.</div></div>";
+      box.innerHTML=read+"<div class='eyebrow' style='margin-top:15px'>Catalogue suggestions</div><div class='result-list' style='margin-top:7px'>"+list+"</div>";
     }catch(x){box.innerHTML="<div class='error'>"+esc(x.message||"Plate scan failed")+"</div>"}
   })
 }
