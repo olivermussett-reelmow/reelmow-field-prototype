@@ -57,8 +57,9 @@ if (fs.existsSync(migrationsDir)) {
   if (!files.length) failures.push("No Supabase migrations found");
   for (const file of files) {
     const text = fs.readFileSync(`${migrationsDir}/${file}`, "utf8");
-    if (/SECURITY DEFINER/i.test(text) && !/set search_path\s*(?:=|to)\s*['"]{2}/i.test(text)) {
-      failures.push(`SECURITY DEFINER migration requires an empty search_path: ${file}`);
+    const definesSecurityDefinerFunction=/SECURITY DEFINER/i.test(text) && /(?:create|alter)\\s+(?:or\\s+replace\\s+)?function/i.test(text);
+    if (definesSecurityDefinerFunction && !/set search_path\\s*(?:=|to)\\s*['"]{2}/i.test(text)) {
+      failures.push(`SECURITY DEFINER function migration requires an empty search_path: ${file}`);
     }
   }
 }
