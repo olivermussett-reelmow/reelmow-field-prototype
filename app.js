@@ -339,7 +339,7 @@ function renderDetail(){
   loadSpecs(m);loadServiceData(m);loadEvidence(m);loadMachineFaults(m)
 }
 function statusLabel(status){return String(status||"ready").replaceAll("_"," ").replace(/\b\w/g,c=>c.toUpperCase())}
-function statusClass(status){return status==="service_due"||status==="out_of_service"?"service":status==="in_service"?"fault":status==="repaired"?"ready":"ready"}
+function statusClass(status){return status==="service_due"||status==="out_of_service"?"service":status==="in_service"?"fault":status==="retired"?"retired":"ready"}
 function faultHtml(){
   if(!state.machineFaults.length)return "<div class='empty-mini'><div class='tiny'>No reported problems.</div></div>";
   return "<div class='list'>"+state.machineFaults.map(x=>{
