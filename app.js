@@ -744,7 +744,7 @@ document.addEventListener("click",e=>{
   if(x==="hours")return hoursModal();
   if(x==="document-upload")return evidenceUploadModal("document");
   if(x==="photo-upload")return evidenceUploadModal("photo");
-  if(x==="open-document")return openDocument(e.target.closest("[data-id]")?.dataset.id);
+  if(x==="open-document")return openDocument(e.target.closest("[data-id]")?.dataset.id);\n  if(x==="open-service-evidence")return openServiceEvidence(e.target.closest("[data-id]")?.dataset.id);
   if(x==="service")return serviceModal();
   if(x==="unknown-machine")return unknownMachineModal();
   if(x==="search-identified"){const query=a.dataset.query||"";closeModal();addModal();const q=document.querySelector("#q");if(q){q.value=query;search(query);q.focus()}return}
