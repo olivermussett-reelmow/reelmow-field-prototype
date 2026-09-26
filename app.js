@@ -15,7 +15,7 @@ const demoCatalogue=[
   {model_id:"demo-allett-shaver",manufacturer_name:"Allett",model_name:"Shaver",variant_id:"demo-allett-shaver-24",variant_name:"Shaver 24",machine_type:"Cylinder Mower",rank:.97},
   {model_id:"demo-atco-royale",manufacturer_name:"Atco",model_name:"Royale 24",variant_id:"demo-atco-royale-ic",variant_name:"Royale 24 I/C - F016310542",machine_type:"Cylinder Mower",rank:.96}
 ];
-const state={client:null,user:null,org:null,garage:null,machines:[],selected:null,specs:[],serviceDue:[],serviceRecords:[],hoursLog:[],catalogueResults:[],dashboardDue:[],loading:false,error:"",pendingPlateFile:null,view:localStorage.getItem("reelmow.view.v1")||"today",demo:localStorage.getItem(DEMO_KEY)==="true" && !(window.REELMOW_CONFIG?.url && window.REELMOW_CONFIG?.key)};
+const state={client:null,user:null,org:null,garage:null,machines:[],selected:null,specs:[],serviceDue:[],serviceRecords:[],hoursLog:[],catalogueResults:[],dashboardDue:[],openFaults:[],machineFaults:[],activity:[],loading:false,error:"",pendingPlateFile:null,quickAction:null,view:localStorage.getItem("reelmow.view.v1")||"today",demo:localStorage.getItem(DEMO_KEY)==="true" && !(window.REELMOW_CONFIG?.url && window.REELMOW_CONFIG?.key)};
 
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const val=s=>document.querySelector(s)?.value.trim()||"";
@@ -80,6 +80,12 @@ async function loadMachines(){
   const {data:due,error:de}=await state.client.schema("garage").from("machine_service_due").select("machine_id,service_status,hours_remaining,task_name").in("machine_id",ids);
   if(de)throw de;
   state.dashboardDue=due||[];
+  if(state.demo){state.openFaults=[]}
+  else{
+    const {data:fo,error:fe}=await state.client.schema("garage").from("machine_faults").select("id,machine_id,severity,status,description,reported_at,reported_by,resolved_at").in("machine_id",ids).neq("status","resolved").order("reported_at",{ascending:false}).limit(30);
+    if(fe)throw fe;
+    state.openFaults=fo||[];
+  }
 }
 async function search(q){
   const box=document.querySelector("#results");if(!q.trim()){box.innerHTML="<p class='tiny'>Try <b>LF3800</b>.</p>";return}
@@ -142,22 +148,71 @@ function card(m){
 function renderToday(){
   const due=(state.dashboardDue||[]).filter(x=>x.service_status==="due"||x.service_status==="upcoming");
   const urgent=due.filter(x=>x.service_status==="due");
+  const faults=(state.openFaults||[]).filter(x=>x.status!=="resolved");
   const machineCount=state.machines.length;
   const totalHours=state.machines.reduce((sum,m)=>sum+(Number(m.current_engine_hours)||0),0);
   const attention=urgent.slice(0,4).map(x=>{
     const m=state.machines.find(v=>v.id===x.machine_id);
     return "<button class='today-task' data-action='open' data-id='"+esc(x.machine_id)+"'><span><strong>"+esc(m?.nickname||m?.model?.model_name||"Machine")+"</strong><small>"+esc(x.task_name||"Service task")+(x.hours_remaining!=null?" · "+esc(x.hours_remaining)+" h remaining":"")+"</small></span><span class='badge "+(x.service_status==="due"?"service":"ready")+"'>"+esc(x.service_status==="due"?"DUE":"SOON")+"</span></button>";
   }).join("");
-  const attentionBlock=attention
-    ? "<section class='today-section'><div class='section-head'><div><div class='eyebrow'>Needs attention</div><h2>What matters now?</h2></div></div><div class='today-tasks'>"+attention+"</div></section>"
-    : "<section class='today-section'><div class='calm-card card'><div class='calm-mark'>✓</div><div><strong>You're up to date.</strong><div class='tiny'>No service tasks currently require action.</div></div></div></section>";
+  const faultAttention=faults.slice(0,4).map(x=>{
+    const m=state.machines.find(v=>v.id===x.machine_id);
+    return "<button class='today-task fault-task' data-action='open' data-id='"+esc(x.machine_id)+"'><span><strong>"+esc(m?.nickname||m?.model?.model_name||"Machine")+"</strong><small>"+esc(x.description)+"</small></span><span class='badge fault-"+esc(x.severity)+"'>"+esc(x.severity.toUpperCase())+"</span></button>";
+  }).join("");
+  const combinedAttention=attention+faultAttention;
+  const attentionBlock=combinedAttention
+    ? "<section class='today-section'><div class='section-head'><div><div class='eyebrow'>Needs attention</div><h2>What matters now?</h2></div></div><div class='today-tasks'>"+combinedAttention+"</div></section>"
+    : "<section class='today-section'><div class='calm-card card'><div class='calm-mark'>✓</div><div><strong>You're up to date.</strong><div class='tiny'>No service tasks or reported faults currently require action.</div></div></div></section>";
   mount("<section class='today-hero'><div><div class='eyebrow'>"+esc(state.demo?"Demo workspace":state.org?.name||"Your workspace")+"</div><h1>Good morning.<br>Let's get to work.</h1><p class='lede' style='color:#d2e1d8'>The important things are here. Everything else can stay out of the way.</p></div><div class='today-status'><span class='status-dot'></span><div><strong>Fleet operational</strong><small>"+machineCount+" machine"+(machineCount===1?"":"s")+" · "+(totalHours?Math.round(totalHours)+" recorded hours":"No hours recorded")+"</small></div></div></section>"+quickActions()+attentionBlock+"<section class='today-section'><div class='section-head'><div><div class='eyebrow'>Your Garage</div><h2>Machinery at a glance</h2></div><button class='btn secondary small' data-action='garage'>View Garage</button></div><div class='today-machine-strip'>"+(state.machines.length?state.machines.slice(0,4).map(card).join(""):"<div class='card empty'><h2>Start with your first machine.</h2><p class='lede'>Build the operational memory of your Garage.</p><button class='btn' data-action='quick-add'>Add machine</button></div>")+"</div></section>");
 }
 function quickActions(){
   return "<div class='quick-actions'><button class='quick-action' data-action='quick-add'><span class='quick-icon'>＋</span><strong>Add machine</strong><small>Catalogue + plate</small></button><button class='quick-action' data-action='quick-hours'><span class='quick-icon'>◷</span><strong>Update hours</strong><small>Fast field entry</small></button><button class='quick-action' data-action='quick-service'><span class='quick-icon'>✓</span><strong>Record service</strong><small>Complete a task</small></button><button class='quick-action' data-action='quick-fault'><span class='quick-icon'>!</span><strong>Report problem</strong><small>Capture an issue</small></button></div>";
 }
+function machinePicker(action){
+  if(!state.machines.length)return setView("catalogue");
+  if(state.machines.length===1){state.selected=state.machines[0];return action==="hours"?hoursModal():action==="service"?serviceModal():faultModal()}
+  state.quickAction=action;
+  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Choose machine</div><h2>Which machine?</h2><p class='tiny'>Start the field action against the correct asset.</p></div><button class='close' data-action='close'>×</button></div><div class='picker-list'>"+state.machines.map(m=>"<button class='picker-row' data-action='quick-machine' data-id='"+esc(m.id)+"'><span><strong>"+esc(m.nickname||m.model?.model_name||"Machine")+"</strong><small>"+esc(m.manufacturer?.name||"")+" · "+esc(m.variant?.variant_name||"")+"</small></span><span class='picker-hours'>"+(m.current_engine_hours!=null?esc(m.current_engine_hours)+" h":"No hours")+" ›</span></button>").join("")+"</div></div></div>");
+}
+function activityIcon(type){return type==="fault"?"!":type==="service"?"✓":type==="hours"?"◷":"•"}
+function activityHtml(){
+  if(!state.activity.length)return "<div class='card empty' style='margin-top:20px'><div class='empty-icon'>◷</div><h2>No activity yet.</h2><p class='lede' style='margin:0 auto'>Hours, service and machine issues will appear here as your team works.</p></div>";
+  return "<div class='activity-list'>"+state.activity.map(x=>{
+    const m=state.machines.find(v=>v.id===x.machine_id);
+    const date=new Date(x.at).toLocaleString([], {day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});
+    const detail=x.type==="fault"?x.description:(x.type==="hours"?(x.engine_hours!=null?x.engine_hours+" engine hours":"Hours reading"):(x.task_name||"Service completed"));
+    return "<article class='activity-row'><div class='activity-icon "+esc(x.type)+"'>"+activityIcon(x.type)+"</div><div class='activity-body'><div class='activity-title'>"+esc(x.title)+"</div><div class='activity-machine'>"+esc(m?.nickname||m?.model?.model_name||"Machine")+" · "+esc(date)+"</div><div class='activity-detail'>"+esc(detail)+"</div></div><span class='badge "+(x.type==="fault"?"service":"ready")+"'>"+esc(x.type)+"</span></article>";
+  }).join("")+"</div>";
+}
+async function loadActivity(){
+  if(state.demo){
+    state.activity=[
+      {type:"service",machine_id:"demo-lf3800",at:"2026-08-14T10:00:00Z",title:"Service completed",task_name:"Engine oil change",engine_hours:1180},
+      {type:"hours",machine_id:"demo-lf3800",at:"2026-09-20T09:00:00Z",title:"Hours updated",engine_hours:1284.5}
+    ];
+    return;
+  }
+  const ids=state.machines.map(m=>m.id);
+  if(!ids.length){state.activity=[];return}
+  const [h,s,faults]=await Promise.all([
+    state.client.schema("garage").from("machine_hours_log").select("id,machine_id,recorded_at,engine_hours,reel_hours,source,notes").in("machine_id",ids).order("recorded_at",{ascending:false}).limit(40),
+    state.client.schema("garage").from("machine_service_records").select("id,machine_id,serviced_at,engine_hours,reel_hours,cost,notes,service_task_id").in("machine_id",ids).order("serviced_at",{ascending:false}).limit(40),
+    state.client.schema("garage").from("machine_faults").select("id,machine_id,status,severity,description,reported_at,resolved_at").in("machine_id",ids).order("reported_at",{ascending:false}).limit(40)
+  ]);
+  if(h.error)throw h.error;if(s.error)throw s.error;if(faults.error)throw faults.error;
+  const taskIds=(s.data||[]).map(x=>x.service_task_id).filter(Boolean);
+  let tasks=[];
+  if(taskIds.length){const t=await state.client.schema("catalogue").from("service_tasks").select("id,task_name").in("id",[...new Set(taskIds)]);if(t.error)throw t.error;tasks=t.data||[]}
+  const tm=new Map(tasks.map(x=>[x.id,x.task_name]));
+  state.activity=[
+    ...(h.data||[]).map(x=>({type:"hours",machine_id:x.machine_id,at:x.recorded_at,title:"Hours updated",engine_hours:x.engine_hours,detail:x.notes})),
+    ...(s.data||[]).map(x=>({type:"service",machine_id:x.machine_id,at:x.serviced_at,title:"Service completed",task_name:tm.get(x.service_task_id)||"Unscheduled service",engine_hours:x.engine_hours,detail:x.notes})),
+    ...(faults.data||[]).map(x=>({type:"fault",machine_id:x.machine_id,at:x.reported_at,title:x.status==="resolved"?"Problem resolved":"Problem reported",severity:x.severity,description:x.description}))
+  ].sort((a,b)=>new Date(b.at)-new Date(a.at)).slice(0,80);
+}
 function renderActivity(){
-  mount("<section class='page-intro'><div class='eyebrow'>Activity</div><h1>What happened?</h1><p class='lede'>A single operational history for services, hours, faults and future mowing.</p></section><div class='card empty' style='margin-top:20px'><div class='empty-icon'>◷</div><h2>Activity foundation ready.</h2><p class='lede' style='margin:0 auto'>The next iteration will combine service, hours, faults and mowing into one searchable timeline.</p></div>");
+  loadActivity().then(()=>{const box=document.querySelector("#activity-content");if(box)box.innerHTML=activityHtml()}).catch(x=>{const box=document.querySelector("#activity-content");if(box)box.innerHTML="<div class='error'>"+esc(x.message||"Could not load activity")+"</div>"});
+  mount("<section class='page-intro'><div class='eyebrow'>Activity</div><h1>What happened?</h1><p class='lede'>A single operational history for services, hours and machine issues.</p></section><div id='activity-content'></div>");
 }
 function renderProfile(){
   mount("<section class='page-intro'><div class='eyebrow'>Profile</div><h1>Your workspace.</h1><p class='lede'>Organisation, account and operating preferences.</p></section><div class='grid two' style='margin-top:20px'><div class='card'><div class='eyebrow'>Organisation</div><h2>"+esc(state.org?.name||"REELMOW Demo")+"</h2><p class='tiny'>"+esc(state.garage?.name||"Main Garage")+" · "+esc(state.garage?.location_name||"Field workspace")+"</p></div><div class='card'><div class='eyebrow'>Account</div><h2>"+esc(state.user?.email||"Demo user")+"</h2><p class='tiny'>Your REELMOW field workspace.</p></div></div>");
@@ -207,7 +262,33 @@ function renderGarage(){
 function renderDetail(){
   const m=state.selected;
   mount("<div class='breadcrumb'><button class='back' data-action='back'>← Garage</button><span>/</span><span>Machine profile</span></div><section class='detail-head'><div class='machine-title'><div class='machine-title-icon'>⚙︎</div><div><div class='eyebrow'>"+esc(m.manufacturer?.name||"Manufacturer")+"</div><h1 style='font-size:38px;margin-bottom:5px'>"+esc(m.nickname||m.model?.model_name||"Machine")+"</h1><p class='muted'>"+esc(m.variant?.variant_name||"Variant")+"</p></div></div><div class='actions'><span class='badge "+(m.status==="service_due"?"service":"ready")+"'>"+esc((m.status||"ready").replaceAll("_"," "))+"</span></div></section><div class='detail-grid'><div><div class='card'><div class='section-head' style='margin:0 0 12px'><div><div class='eyebrow'>Machine health</div><h2>At a glance</h2></div><button class='btn secondary small' data-action='edit'>Edit</button></div><div class='metric-row'><div class='metric'><div class='num'>"+(m.current_engine_hours??"—")+"</div><div class='label'>Engine hours</div></div><div class='metric'><div class='num'>"+(m.current_reel_hours??"—")+"</div><div class='label'>Reel hours</div></div></div><div class='actions' style='margin-top:14px'><button class='btn small' data-action='hours'>Update hours</button><button class='btn secondary small' data-action='service'>Record service</button></div><div class='list'><div class='list-row'><div><div class='list-title'>Serial number</div><div class='list-meta'>"+esc(m.serial_number||"Not recorded")+"</div></div></div><div class='list-row'><div><div class='list-title'>Asset number</div><div class='list-meta'>"+esc(m.asset_number||"Not recorded")+"</div></div></div><div class='list-row'><div><div class='list-title'>Purchase date</div><div class='list-meta'>"+esc(m.purchase_date||"Not recorded")+"</div></div></div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Service status</div><h2>What needs doing?</h2><div id='service-due'><div class='loading'><div class='spinner'></div>Checking service schedule…</div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Catalogue specifications</div><h2>Known machine data</h2><div id='specs'><div class='loading'><div class='spinner'></div>Loading verified specifications…</div></div></div></div><div><div class='card'><div class='eyebrow'>Service history</div><h2>Recent work</h2><div id='service-history'><div class='loading'><div class='spinner'></div>Loading service history…</div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Documents</div><h2>Machine knowledge</h2><div class='actions' style='margin:10px 0'><button class='btn secondary small' data-action='document-upload'>Add document</button></div><div id='machine-documents'><div class='loading'><div class='spinner'></div>Loading documents…</div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Photos</div><h2>Machine evidence</h2><div class='actions' style='margin:10px 0'><button class='btn secondary small' data-action='photo-upload'>Take / add photo</button></div><div id='machine-photos'><div class='loading'><div class='spinner'></div>Loading photos…</div></div></div></div></div>");
-  loadSpecs(m);loadServiceData(m);loadEvidence(m)
+  loadSpecs(m);loadServiceData(m);loadEvidence(m);loadMachineFaults(m)
+}
+function faultHtml(){
+  if(!state.machineFaults.length)return "<div class='empty-mini'><div class='tiny'>No reported problems.</div></div>";
+  return "<div class='list'>"+state.machineFaults.map(x=>"<div class='list-row fault-row'><div><div class='list-title'>"+esc(x.severity.toUpperCase())+" · "+esc(x.status.replace("_"," "))+"</div><div class='list-meta'>"+esc(new Date(x.reported_at).toLocaleDateString())+" · "+esc(x.description)+"</div>"+(x.resolution_notes?"<div class='list-meta' style='margin-top:4px'>"+esc(x.resolution_notes)+"</div>":"")+"</div>"+(x.status!=="resolved"?"<button class='btn ghost small' data-action='resolve-fault' data-id='"+esc(x.id)+"'>Resolve</button>":"<span class='badge ready'>RESOLVED</span>")+"</div>").join("")+"</div>";
+}
+async function loadMachineFaults(m){
+  if(state.demo){state.machineFaults=[]}
+  else{
+    const {data,error}=await state.client.schema("garage").from("machine_faults").select("id,severity,status,description,reported_at,resolved_at,resolution_notes").eq("machine_id",m.id).order("reported_at",{ascending:false}).limit(20);
+    if(error)return toast(error.message);
+    state.machineFaults=data||[];
+  }
+  const box=document.querySelector("#machine-faults");if(box)box.innerHTML=faultHtml();
+}
+function resolveFaultModal(id){
+  const fault=state.machineFaults.find(x=>x.id===id);if(!fault)return;
+  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Resolve issue</div><h2>Close the loop.</h2><p class='tiny'>Record what was done so the issue becomes part of the machine history.</p></div><button class='close' data-action='close'>×</button></div><form id='resolve-form'><div class='field'><label>Resolution notes</label><textarea class='input' id='resolution-notes' rows='4' required placeholder='What was repaired, adjusted or checked?'></textarea></div><button class='btn' style='width:100%'>Mark resolved</button></form></div></div>");
+  document.querySelector("#resolve-form").addEventListener("submit",async e=>{
+    e.preventDefault();
+    if(state.demo){fault.status="resolved";fault.resolution_notes=val("#resolution-notes");fault.resolved_at=new Date().toISOString();closeModal();toast("Problem resolved");return renderDetail()}
+    try{
+      const {error}=await state.client.schema("garage").from("machine_faults").update({status:"resolved",resolved_at:new Date().toISOString(),resolution_notes:val("#resolution-notes"),updated_at:new Date().toISOString()}).eq("id",id);
+      if(error)throw error;
+      closeModal();await loadMachines();await loadMachineFaults(state.selected);toast("Problem resolved");renderDetail();
+    }catch(x){toast(x.message||"Could not resolve problem")}
+  });
 }
 function specsHtml(){
   return "<div class='spec-grid'>"+state.specs.map(s=>"<div class='spec'><div class='v'>"+esc(s.value_text??s.value_number??"—")+(s.unit?" "+esc(s.unit):"")+"</div><div class='k'>"+esc(s.label)+"</div></div>").join("")+"</div>"
@@ -478,9 +559,15 @@ document.addEventListener("click",e=>{
   const x=a.dataset.action;
   if(["today","garage","catalogue","activity","profile"].includes(x))return setView(x);
   if(x==="quick-add")return setView("catalogue");
-  if(x==="quick-hours"){if(!state.machines.length)return setView("catalogue");state.selected=state.machines[0];return hoursModal()}
-  if(x==="quick-service"){if(!state.machines.length)return setView("catalogue");state.selected=state.machines[0];return serviceModal()}
-  if(x==="quick-fault"){if(!state.machines.length)return setView("catalogue");state.selected=state.machines[0];return faultModal()}
+  if(x==="quick-hours")return machinePicker("hours");
+  if(x==="quick-service")return machinePicker("service");
+  if(x==="quick-fault")return machinePicker("fault");
+  if(x==="quick-machine"){
+    state.selected=state.machines.find(v=>v.id===a.dataset.id)||null;
+    const action=state.quickAction;state.quickAction=null;closeModal();
+    if(action==="hours")return hoursModal();if(action==="service")return serviceModal();return faultModal();
+  }
+  if(x==="resolve-fault")return resolveFaultModal(a.dataset.id);
   if(x==="connection")return connectionModal();
   if(x==="demo"){state.demo=true;localStorage.setItem(DEMO_KEY,"true");loadDemo();closeModal();return render()}
   if(x==="close")return closeModal();
