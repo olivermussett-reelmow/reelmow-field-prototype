@@ -245,7 +245,18 @@ function activityHtml(){
     return "<article class='activity-row'><div class='activity-icon "+esc(x.type)+"'>"+activityIcon(x.type)+"</div><div class='activity-body'><div class='activity-title'>"+esc(x.title)+"</div><div class='activity-machine'>"+esc(m?.nickname||m?.model?.model_name||"Machine")+" · "+esc(date)+"</div><div class='activity-detail'>"+esc(detail)+"</div></div><span class='badge "+(x.type==="fault"?"service":"ready")+"'>"+esc(x.type)+"</span></article>";
   }).join("")+"</div>";
 }
-async function loadActivity(){
+function pendingActivityFor(machineId){
+  return readOutbox().filter(x=>x.payload?.machineId===machineId).map(x=>({
+    type:x.type==="fault"?"fault":x.type,
+    machine_id:machineId,
+    at:x.createdAt,
+    title:x.type==="hours"?"Hours update pending sync":x.type==="service"?"Service record pending sync":"Problem report pending sync",
+    detail:x.type==="hours"?(x.payload.engineHours!=null?"Engine "+x.payload.engineHours+" h":"Hours reading saved on device"):x.type==="service"?(x.payload.notes||"Service record saved on device"):(x.payload.description||"Problem report saved on device"),
+    severity:x.payload.severity,
+    pending:true
+  }));
+}
+function loadActivity(){
   if(state.demo){
     state.activity=[
       {type:"service",machine_id:"demo-lf3800",at:"2026-08-14T10:00:00Z",title:"Service completed",task_name:"Engine oil change",engine_hours:1180},
@@ -269,11 +280,12 @@ async function loadActivity(){
     ...(h.data||[]).map(x=>({type:"hours",machine_id:x.machine_id,at:x.recorded_at,title:"Hours updated",engine_hours:x.engine_hours,detail:x.notes})),
     ...(s.data||[]).map(x=>({type:"service",machine_id:x.machine_id,at:x.serviced_at,title:"Service completed",task_name:tm.get(x.service_task_id)||"Unscheduled service",engine_hours:x.engine_hours,detail:x.notes})),
     ...(faults.data||[]).map(x=>({type:"fault",machine_id:x.machine_id,at:x.reported_at,title:x.status==="resolved"?"Problem resolved":"Problem reported",severity:x.severity,description:x.description}))
-  ].sort((a,b)=>new Date(b.at)-new Date(a.at)).slice(0,80);
+  ].concat(state.machines.flatMap(m=>pendingActivityFor(m.id))).sort((a,b)=>new Date(b.at)-new Date(a.at)).slice(0,80);
 }
 function renderActivity(){
   loadActivity().then(()=>{const box=document.querySelector("#activity-content");if(box)box.innerHTML=activityHtml()}).catch(x=>{const box=document.querySelector("#activity-content");if(box)box.innerHTML="<div class='error'>"+esc(x.message||"Could not load activity")+"</div>"});
-  mount("<section class='page-intro'><div class='eyebrow'>Activity</div><h1>What happened?</h1><p class='lede'>A single operational history for services, hours and machine issues.</p></section><div id='activity-content'></div>");
+  const pending=readOutbox().length;
+  mount("<section class='page-intro'><div class='eyebrow'>Activity</div><h1>What happened?</h1><p class='lede'>A single operational history for services, hours and machine issues.</p>"+(pending?"<div class='note' style='margin-top:14px'><b>"+pending+" saved change"+(pending===1?"":"s")+" waiting to sync.</b> REELMOW will retry automatically when a connection is available.</div>":"")+"</section><div id='activity-content'></div>");
 }
 function renderProfile(){
   mount("<section class='page-intro'><div class='eyebrow'>Profile</div><h1>Your workspace.</h1><p class='lede'>Organisation, account and operating preferences.</p></section><div class='grid two' style='margin-top:20px'><div class='card'><div class='eyebrow'>Organisation</div><h2>"+esc(state.org?.name||"REELMOW Demo")+"</h2><p class='tiny'>"+esc(state.garage?.name||"Main Garage")+" · "+esc(state.garage?.location_name||"Field workspace")+"</p></div><div class='card'><div class='eyebrow'>Account</div><h2>"+esc(state.user?.email||"Demo user")+"</h2><p class='tiny'>Your REELMOW field workspace.</p></div></div>");
@@ -322,7 +334,8 @@ function renderGarage(){
 
 function renderDetail(){
   const m=state.selected;
-  mount("<div class='breadcrumb'><button class='back' data-action='back'>← Garage</button><span>/</span><span>Machine profile</span></div><section class='detail-head'><div class='machine-title'><div class='machine-title-icon'>⚙︎</div><div><div class='eyebrow'>"+esc(m.manufacturer?.name||"Manufacturer")+"</div><h1 style='font-size:38px;margin-bottom:5px'>"+esc(m.nickname||m.model?.model_name||"Machine")+"</h1><p class='muted'>"+esc(m.variant?.variant_name||"Variant")+"</p></div></div><div class='actions'><span class='badge "+(m.status==="service_due"?"service":"ready")+"'>"+esc((m.status||"ready").replaceAll("_"," "))+"</span></div></section><div class='detail-grid'><div><div class='card'><div class='section-head' style='margin:0 0 12px'><div><div class='eyebrow'>Machine health</div><h2>At a glance</h2></div><button class='btn secondary small' data-action='edit'>Edit</button></div><div class='metric-row'><div class='metric'><div class='num'>"+(m.current_engine_hours??"—")+"</div><div class='label'>Engine hours</div></div><div class='metric'><div class='num'>"+(m.current_reel_hours??"—")+"</div><div class='label'>Reel hours</div></div></div><div class='actions' style='margin-top:14px'><button class='btn small' data-action='hours'>Update hours</button><button class='btn secondary small' data-action='service'>Record service</button></div><div class='list'><div class='list-row'><div><div class='list-title'>Serial number</div><div class='list-meta'>"+esc(m.serial_number||"Not recorded")+"</div></div></div><div class='list-row'><div><div class='list-title'>Asset number</div><div class='list-meta'>"+esc(m.asset_number||"Not recorded")+"</div></div></div><div class='list-row'><div><div class='list-title'>Purchase date</div><div class='list-meta'>"+esc(m.purchase_date||"Not recorded")+"</div></div></div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Service status</div><h2>What needs doing?</h2><div id='service-due'><div class='loading'><div class='spinner'></div>Checking service schedule…</div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Catalogue specifications</div><h2>Known machine data</h2><div id='specs'><div class='loading'><div class='spinner'></div>Loading verified specifications…</div></div></div></div><div><div class='card'><div class='eyebrow'>Service history</div><h2>Recent work</h2><div id='service-history'><div class='loading'><div class='spinner'></div>Loading service history…</div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Documents</div><h2>Machine knowledge</h2><div class='actions' style='margin:10px 0'><button class='btn secondary small' data-action='document-upload'>Add document</button></div><div id='machine-documents'><div class='loading'><div class='spinner'></div>Loading documents…</div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Photos</div><h2>Machine evidence</h2><div class='actions' style='margin:10px 0'><button class='btn secondary small' data-action='photo-upload'>Take / add photo</button></div><div id='machine-photos'><div class='loading'><div class='spinner'></div>Loading photos…</div></div></div></div></div>");
+  const pending=readOutbox().filter(x=>x.payload?.machineId===m.id).length;
+  mount("<div class='breadcrumb'><button class='back' data-action='back'>← Garage</button><span>/</span><span>Machine profile</span></div><section class='detail-head'><div class='machine-title'><div class='machine-title-icon'>⚙︎</div><div><div class='eyebrow'>"+esc(m.manufacturer?.name||"Manufacturer")+"</div><h1 style='font-size:38px;margin-bottom:5px'>"+esc(m.nickname||m.model?.model_name||"Machine")+"</h1><p class='muted'>"+esc(m.variant?.variant_name||"Variant")+"</p></div></div><div class='actions'><span class='badge "+(m.status==="service_due"?"service":"ready")+"'>"+esc((m.status||"ready").replaceAll("_"," "))+"</span></div></section><div class='detail-grid'><div><div class='card'><div class='section-head' style='margin:0 0 12px'><div><div class='eyebrow'>Machine health</div><h2>At a glance</h2></div><button class='btn secondary small' data-action='edit'>Edit</button></div><div class='metric-row'><div class='metric'><div class='num'>"+(m.current_engine_hours??"—")+"</div><div class='label'>Engine hours</div></div><div class='metric'><div class='num'>"+(m.current_reel_hours??"—")+"</div><div class='label'>Reel hours</div></div></div><div class='actions' style='margin-top:14px'><button class='btn small' data-action='hours'>Update hours</button><button class='btn secondary small' data-action='service'>Record service</button></div><div class='list'><div class='list-row'><div><div class='list-title'>Serial number</div><div class='list-meta'>"+esc(m.serial_number||"Not recorded")+"</div></div></div><div class='list-row'><div><div class='list-title'>Asset number</div><div class='list-meta'>"+esc(m.asset_number||"Not recorded")+"</div></div></div><div class='list-row'><div><div class='list-title'>Purchase date</div><div class='list-meta'>"+esc(m.purchase_date||"Not recorded")+"</div></div></div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Service status</div><h2>What needs doing?</h2><div id='service-due'><div class='loading'><div class='spinner'></div>Checking service schedule…</div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Catalogue specifications</div><h2>Known machine data</h2><div id='specs'><div class='loading'><div class='spinner'></div>Loading verified specifications…</div></div></div></div><div><div class='card'><div class='eyebrow'>Service history</div><h2>Recent work</h2><div id='service-history'><div class='loading'><div class='spinner'></div>Loading service history…</div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Documents</div><h2>Machine knowledge</h2><div class='actions' style='margin:10px 0'><button class='btn secondary small' data-action='document-upload'>Add document</button></div><div id='machine-documents'><div class='loading'><div class='spinner'></div>Loading documents…</div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Photos</div><h2>Machine evidence</h2><div class='actions' style='margin:10px 0'><button class='btn secondary small' data-action='photo-upload'>Take / add photo</button></div><div id='machine-photos'><div class='loading'><div class='spinner'></div>Loading photos…</div></div></div></div></div>"+(pending?"<div class='note' style='margin:0 0 15px'><b>"+pending+" change"+(pending===1?"":"s")+" saved on this device.</b> It will sync automatically when online.</div>":"");
   loadSpecs(m);loadServiceData(m);loadEvidence(m);loadMachineFaults(m)
 }
 function faultHtml(){
@@ -590,6 +603,7 @@ function faultModal(){
     const description=val("#fault-description"), severity=val("#fault-severity");
     try{
       if(state.demo){closeModal();toast("Problem reported");return}
+      if(!description){toast("Please describe the problem");return}
       if(!navigator.onLine){closeModal();queueMutation("fault",{machineId:m.id,severity,description});return}
       const {error}=await state.client.schema("garage").rpc("sync_report_machine_fault",{operation_id:crypto.randomUUID(),target_machine:m.id,target_severity:severity,target_description:description});
       if(error)throw error;
@@ -599,13 +613,13 @@ function faultModal(){
 }
 function editModal(){
   const m=state.selected;
-  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Machine details</div><h2>Edit machine.</h2><p class='tiny'>Update the physical asset record. Catalogue identity remains fixed.</p></div><button class='close' data-action='close'>×</button></div><form id='edit-machine'><div class='field'><label>Nickname</label><input class='input' id='edit-nickname' value='"+esc(m.nickname||"")+"' maxlength='80'></div><div class='field'><label>Asset number</label><input class='input' id='edit-asset' value='"+esc(m.asset_number||"")+"' maxlength='80'></div><div class='field'><label>Purchase date</label><input class='input' id='edit-date' type='date' value='"+esc(m.purchase_date||"")+"' ></div><div class='field'><label>Status</label><select class='input' id='edit-status'><option value='ready'>Ready</option><option value='service_due'>Service due</option><option value='in_service'>In service</option><option value='out_of_service'>Out of service</option><option value='retired'>Retired</option></select></div><div class='field'><label>Notes</label><textarea class='input' id='edit-notes' rows='4' maxlength='2000'>"+esc(m.notes||"")+"</textarea></div><button class='btn' style='width:100%'>Save changes</button></form></div></div>");
+  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Machine details</div><h2>Edit machine.</h2><p class='tiny'>Update the physical asset record. Catalogue identity remains fixed.</p></div><button class='close' data-action='close'>×</button></div><form id='edit-machine'><div class='field'><label>Serial number</label><input class='input' id='edit-serial' value='"+esc(m.serial_number||"")+"' maxlength='120'></div><div class='field'><label>Nickname</label><input class='input' id='edit-nickname' value='"+esc(m.nickname||"")+"' maxlength='80'></div><div class='field'><label>Asset number</label><input class='input' id='edit-asset' value='"+esc(m.asset_number||"")+"' maxlength='80'></div><div class='field'><label>Purchase date</label><input class='input' id='edit-date' type='date' value='"+esc(m.purchase_date||"")+"' ></div><div class='field'><label>Status</label><select class='input' id='edit-status'><option value='ready'>Ready</option><option value='service_due'>Service due</option><option value='in_service'>In service</option><option value='out_of_service'>Out of service</option><option value='retired'>Retired</option></select></div><div class='field'><label>Notes</label><textarea class='input' id='edit-notes' rows='4' maxlength='2000'>"+esc(m.notes||"")+"</textarea></div><button class='btn' style='width:100%'>Save changes</button></form></div></div>");
   document.querySelector("#edit-status").value=m.status||"ready";
   document.querySelector("#edit-machine").addEventListener("submit",async e=>{
     e.preventDefault();
     if(state.demo){Object.assign(m,{nickname:val("#edit-nickname"),asset_number:val("#edit-asset"),purchase_date:val("#edit-date")||null,status:val("#edit-status"),notes:val("#edit-notes")});closeModal();toast("Machine updated");return render()}
     try{
-      const {error}=await state.client.schema("garage").from("machines").update({nickname:val("#edit-nickname"),asset_number:val("#edit-asset"),purchase_date:val("#edit-date")||null,status:val("#edit-status"),notes:val("#edit-notes"),updated_at:new Date().toISOString()}).eq("id",m.id);
+      const {error}=await state.client.schema("garage").from("machines").update({serial_number:val("#edit-serial"),nickname:val("#edit-nickname"),asset_number:val("#edit-asset"),purchase_date:val("#edit-date")||null,status:val("#edit-status"),notes:val("#edit-notes"),updated_at:new Date().toISOString()}).eq("id",m.id);
       if(error)throw error;
       closeModal();await loadMachines();state.selected=state.machines.find(x=>x.id===m.id)||m;toast("Machine updated");render();
     }catch(x){toast(x.message||"Could not update machine")}
@@ -634,14 +648,23 @@ async function identifyPlate(file){
 }
 async function saveMachine(e,r){
   e.preventDefault();
-  const p={garage_id:state.garage.id,machine_variant_id:r.variant_id,serial_number:val("#serial"),asset_number:val("#asset"),nickname:val("#nickname"),purchase_date:val("#date")||null,current_engine_hours:num("#hours"),current_reel_hours:num("#reel"),created_by:state.user?.id||null};
+  const serial=val("#serial"),asset=val("#asset"),nickname=val("#nickname"),purchaseDate=val("#date"),engineHours=num("#hours"),reelHours=num("#reel");
+  if(engineHours!=null&&engineHours<0||reelHours!=null&&reelHours<0){toast("Hours cannot be negative");return}
+  const p={garage_id:state.garage.id,machine_variant_id:r.variant_id,serial_number:serial||null,asset_number:asset||null,nickname:nickname||null,purchase_date:purchaseDate||null,current_engine_hours:engineHours,current_reel_hours:reelHours,created_by:state.user?.id||null};
   if(state.demo){state.machines.unshift({...p,id:crypto.randomUUID(),status:"ready",variant:{variant_name:r.variant_name},model:{model_name:r.model_name},manufacturer:{name:r.manufacturer_name}});closeModal();toast("Machine added to Garage");return render()}
   try{
+    if(serial){
+      const {data:duplicate,error:de}=await state.client.schema("garage").from("machines").select("id").eq("garage_id",state.garage.id).ilike("serial_number",serial).limit(1);
+      if(de)throw de;
+      if(duplicate?.length){throw new Error("A machine with this serial number is already in this Garage.");}
+    }
     const {data:created,error}=await state.client.schema("garage").from("machines").insert(p).select("id").single();
     if(error)throw error;
     if(state.pendingPlateFile){
       const file=state.pendingPlateFile,bucket="reelmow-garage-private",path="org/"+state.org.id+"/machines/"+created.id+"/"+Date.now()+"-"+crypto.randomUUID()+".jpg";
-      const up=await state.client.storage.from(bucket).upload(path,file,{contentType:file.type||"image/jpeg",upsert:false});
+      const resized=await imageDataUrl(file,1800,.84);
+      const blob=await (await fetch(resized)).blob();
+      const up=await state.client.storage.from(bucket).upload(path,blob,{contentType:"image/jpeg",upsert:false});
       if(!up.error){
         const {error:pe}=await state.client.schema("garage").from("machine_photos").insert({
           machine_id:created.id,storage_bucket:bucket,storage_path:path,caption:"Machine model / serial plate",photo_type:"serial_plate",
