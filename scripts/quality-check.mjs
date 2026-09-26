@@ -44,7 +44,7 @@ if (!sw.includes('self.addEventListener("fetch"')) failures.push("Service worker
 
 const actionRefs = new Set([...app.matchAll(/data-action=['"]([^'"]+)['"]/g)].map(m => m[1]));
 const handlerRefs = new Set([...app.matchAll(/if\(x===["']([^"']+)["']\)/g)].map(m => m[1]));
-for (const action of ["today", "garage", "catalogue", "activity", "profile"]) handlerRefs.add(action);
+for (const action of ["today", "garage", "catalogue", "activity", "profile", "back", "home"]) handlerRefs.add(action);
 for (const action of ["service-task", "open-document", "open-service-evidence"]) handlerRefs.add(action);
 
 for (const action of actionRefs) {
