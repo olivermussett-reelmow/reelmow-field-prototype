@@ -55,3 +55,44 @@
 .breadcrumb .back{margin:0}
 .breadcrumb>span:nth-last-child(1){color:var(--ink)}
 @media(max-width:600px){.top-nav{order:3;width:100%;justify-content:center;margin:0;border-top:1px solid var(--line);padding-top:5px}.topbar{height:auto;min-height:68px;flex-wrap:wrap;padding-bottom:6px}.top-actions{margin-left:auto}.brand{margin-right:auto}.nav-link{padding:7px 11px}.breadcrumb{margin-top:3px}}
+
+/* Phase 6 mobile-first product foundation */
+.today-hero{display:grid;grid-template-columns:1.5fr .7fr;gap:14px;margin-bottom:16px}
+.today-hero>div:first-child{background:var(--deep);color:#fff;border-radius:28px;padding:30px;box-shadow:var(--shadow)}
+.today-status{background:var(--surface);border:1px solid var(--line);border-radius:28px;padding:22px;display:flex;align-items:center;gap:12px;box-shadow:var(--shadow)}
+.status-dot{width:12px;height:12px;border-radius:50%;background:var(--green);box-shadow:0 0 0 6px rgba(22,132,71,.1);flex:0 0 auto}
+.today-status strong,.today-status small{display:block}.today-status small{font-size:12px;color:var(--muted);margin-top:3px}
+.quick-actions{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:0 0 30px}
+.quick-action{min-height:116px;text-align:left;border:1px solid var(--line);background:var(--surface);border-radius:20px;padding:16px;cursor:pointer;box-shadow:0 8px 28px rgba(20,40,25,.045)}
+.quick-action:hover{border-color:#9bb9a5;transform:translateY(-1px)}
+.quick-icon{display:grid;place-items:center;width:36px;height:36px;border-radius:12px;background:var(--surface2);color:var(--green);font-size:20px;font-weight:900;margin-bottom:15px}
+.quick-action strong,.quick-action small{display:block}.quick-action strong{font-size:13px}.quick-action small{font-size:11px;color:var(--muted);margin-top:4px}
+.today-section{margin-top:26px}.today-tasks{border:1px solid var(--line);border-radius:20px;overflow:hidden;background:var(--surface)}
+.today-task{width:100%;border:0;border-bottom:1px solid var(--line);background:transparent;padding:17px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px;text-align:left;cursor:pointer}
+.today-task:last-child{border-bottom:0}.today-task:hover{background:var(--surface2)}
+.today-task strong,.today-task small{display:block}.today-task strong{font-size:14px}.today-task small{font-size:12px;color:var(--muted);margin-top:3px}
+.today-machine-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.today-machine-strip .machine-card .machine-visual{height:110px}
+.page-intro{margin-bottom:20px}
+.mobile-nav{display:none}
+@media(max-width:800px){
+  .today-hero{grid-template-columns:1fr}
+  .quick-actions{grid-template-columns:repeat(2,1fr)}
+  .today-machine-strip{grid-template-columns:repeat(2,1fr)}
+}
+@media(max-width:600px){
+  body{padding-bottom:76px}
+  .shell{padding:0 14px 35px}
+  .topbar{position:sticky;top:0}
+  .top-nav{display:none}
+  .top-actions .btn{min-height:40px;padding:9px 11px}
+  .today-hero>div:first-child,.today-status{border-radius:22px}
+  .today-hero>div:first-child{padding:24px}
+  .today-status{padding:17px}
+  .quick-actions{gap:8px;margin-bottom:25px}
+  .quick-action{min-height:108px;padding:14px;border-radius:17px}
+  .quick-icon{margin-bottom:11px}
+  .today-machine-strip{grid-template-columns:1fr}
+  .today-machine-strip .machine-card .machine-visual{height:130px}
+  .mobile-nav{position:fixed;display:grid;grid-template-columns:repeat(4,1fr);left:10px;right:10px;bottom:10px;z-index:40;padding:7px;border:1px solid var(--line);border-radius:19px;background:rgba(255,255,255,.94);backdrop-filter:blur(18px);box-shadow:0 15px 45px rgba(15,45,29,.15)}
+  .mobile-nav .nav-link{padding:11px 4px;font-size:11px}
+}

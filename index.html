@@ -41,7 +41,12 @@ window.addEventListener("unhandledrejection",function(e){
   if(box){box.style.display="block";box.textContent="REELMOW could not start.\n"+(e.reason?.message||e.reason||"Startup error");}
 });
 </script>
-<script src="./reelmow.config.js?v=20260925-6"></script>
-<script type="module" src="./app.js?v=20260925-6"></script>
+<script src="./reelmow.config.js?v=20260926-1"></script>
+<script>
+if("serviceWorker" in navigator){
+  window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(()=>{}));
+}
+</script>
+<script type="module" src="./app.js?v=20260926-1"></script>
 </body>
 </html>

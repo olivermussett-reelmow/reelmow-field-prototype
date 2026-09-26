@@ -2,7 +2,7 @@
 let createClient = null;
 async function loadSupabaseClient(){
   if(createClient) return createClient;
-  const mod = await import("https://esm.sh/@supabase/supabase-js@2");
+  const mod = await import("https://esm.sh/@supabase/supabase-js@2.117.1");
   createClient = mod.createClient;
   return createClient;
 }
@@ -15,7 +15,7 @@ const demoCatalogue=[
   {model_id:"demo-allett-shaver",manufacturer_name:"Allett",model_name:"Shaver",variant_id:"demo-allett-shaver-24",variant_name:"Shaver 24",machine_type:"Cylinder Mower",rank:.97},
   {model_id:"demo-atco-royale",manufacturer_name:"Atco",model_name:"Royale 24",variant_id:"demo-atco-royale-ic",variant_name:"Royale 24 I/C - F016310542",machine_type:"Cylinder Mower",rank:.96}
 ];
-const state={client:null,user:null,org:null,garage:null,machines:[],selected:null,specs:[],serviceDue:[],serviceRecords:[],hoursLog:[],catalogueResults:[],dashboardDue:[],loading:false,error:"",pendingPlateFile:null,demo:localStorage.getItem(DEMO_KEY)==="true" && !(window.REELMOW_CONFIG?.url && window.REELMOW_CONFIG?.key)};
+const state={client:null,user:null,org:null,garage:null,machines:[],selected:null,specs:[],serviceDue:[],serviceRecords:[],hoursLog:[],catalogueResults:[],dashboardDue:[],loading:false,error:"",pendingPlateFile:null,view:localStorage.getItem("reelmow.view.v1")||"today",demo:localStorage.getItem(DEMO_KEY)==="true" && !(window.REELMOW_CONFIG?.url && window.REELMOW_CONFIG?.key)};
 
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const val=s=>document.querySelector(s)?.value.trim()||"";
@@ -93,19 +93,32 @@ async function search(q){
   }catch(e){box.innerHTML="<div class='error'>"+esc(e.message||"Search failed")+"</div>"}finally{state.loading=false}
 }
 function shell(c){
-  const ok=state.demo||connected();
   const connectionLabel=state.demo?"Demo mode":connected()?"Connected":"Connect";
   const connectionClass=state.demo?"demo":connected()?"ok":"";
-  return "<div class='shell'><header class='topbar'><div class='brand'><span class='mark'></span>REEL<span>MOW</span></div><nav class='top-nav'><button class='nav-link active' data-action='home'>Garage</button><button class='nav-link' data-action='add'>Catalogue</button></nav><div class='top-actions'><button class='btn ghost small' data-action='connection'><span class='dot "+connectionClass+"'></span>"+connectionLabel+"</button>"+(state.user?"<div class='avatar'>"+esc(initials(state.user.email))+"</div>":"")+"</div></header><main class='page'>"+c+"</main><div class='footer'>REELMOW Garage · Every machine. Every manual. Every service. One place.</div></div>"
+  const active=state.view||"today";
+  const nav=(key,label)=>"<button class='nav-link "+(active===key?"active":"")+"' data-action='"+key+"'>"+label+"</button>";
+  return "<div class='shell'><header class='topbar'><div class='brand'><span class='mark'></span>REEL<span>MOW</span></div><nav class='top-nav'>"+nav("today","Today")+nav("garage","Garage")+nav("catalogue","Catalogue")+"</nav><div class='top-actions'><button class='btn ghost small' data-action='connection'><span class='dot "+connectionClass+"'></span>"+connectionLabel+"</button>"+(state.user?"<div class='avatar'>"+esc(initials(state.user.email))+"</div>":"")+"</div></header><main class='page'>"+c+"</main><nav class='mobile-nav'>"+nav("today","Today")+nav("garage","Garage")+nav("activity","Activity")+nav("profile","Profile")+"</nav><div class='footer'>REELMOW · Field operations, under control.</div></div>"
 }
 function mount(c){app.innerHTML="<div class='app'>"+shell(c)+"</div>"}
+function setView(view){
+  state.view=view;
+  localStorage.setItem("reelmow.view.v1",view);
+  state.selected=null;
+  state.specs=[];
+  render();
+}
 function render(){
   if(!state.demo&&!connected())return renderConnect();
   if(!state.demo&&!state.user)return renderAuth();
   if(!state.demo&&!state.org)return renderOrg();
   if(!state.demo&&!state.garage)return renderGarageSetup();
   if(state.selected)return renderDetail();
-  renderGarage();
+  if(state.view==="today")return renderToday();
+  if(state.view==="garage")return renderGarage();
+  if(state.view==="catalogue")return renderCataloguePage();
+  if(state.view==="activity")return renderActivity();
+  if(state.view==="profile")return renderProfile();
+  return renderToday();
 }
 function renderConnect(){
   mount("<section class='hero'><div class='hero-card'><div class='hero-copy'><div class='eyebrow'>Digital machinery management</div><h1>Your machinery, under control.</h1><p class='lede' style='color:#d2e1d8'>Machines, manuals, specifications and service history in one digital Garage.</p><div class='actions' style='margin-top:24px'><button class='btn' data-action='connection'>Connect Supabase</button><button class='btn secondary' data-action='demo'>Preview Garage</button></div></div></div><div class='hero-stat'><div><div class='stat-num'>0</div><div class='stat-label'>Machines in your Garage</div></div><div class='tiny'>Connect the live project to use real data.</div></div></section><div class='grid'><div class='card'><div class='eyebrow'>Catalogue</div><h3>Verified machine knowledge</h3><p class='tiny'>Search manufacturer, model and variant records before adding an asset.</p></div><div class='card'><div class='eyebrow'>Service</div><h3>One machine record</h3><p class='tiny'>Hours, service records and documents stay attached to the physical asset.</p></div><div class='card'><div class='eyebrow'>Grounds teams</div><h3>Built around the work</h3><p class='tiny'>Calm, practical machinery management for clubs, estates, education and contractors.</p></div></div>")
@@ -125,6 +138,32 @@ function renderGarageSetup(){
 function card(m){
   const n=m.model?.model_name||"Machine",v=m.variant?.variant_name||"Catalogue variant";
   return "<article class='card machine-card' data-action='open' data-id='"+esc(m.id)+"'><div class='machine-visual'><div class='glyph'>⚙︎</div></div><div class='machine-name'>"+esc(m.nickname||n)+"</div><div class='machine-sub'>"+esc(m.manufacturer?.name||"Manufacturer")+" · "+esc(v)+"</div><div class='machine-meta'><span class='badge "+(m.status==="service_due"?"service":"ready")+"'>"+esc((m.status||"ready").replaceAll("_"," "))+"</span><span class='tiny'>"+(m.current_engine_hours!=null?esc(m.current_engine_hours)+" h":"No hours")+"</span></div></article>"
+}
+function renderToday(){
+  const due=(state.dashboardDue||[]).filter(x=>x.service_status==="due"||x.service_status==="upcoming");
+  const urgent=due.filter(x=>x.service_status==="due");
+  const machineCount=state.machines.length;
+  const totalHours=state.machines.reduce((sum,m)=>sum+(Number(m.current_engine_hours)||0),0);
+  const attention=urgent.slice(0,4).map(x=>{
+    const m=state.machines.find(v=>v.id===x.machine_id);
+    return "<button class='today-task' data-action='open' data-id='"+esc(x.machine_id)+"'><span><strong>"+esc(m?.nickname||m?.model?.model_name||"Machine")+"</strong><small>"+esc(x.task_name||"Service task")+(x.hours_remaining!=null?" · "+esc(x.hours_remaining)+" h remaining":"")+"</small></span><span class='badge "+(x.service_status==="due"?"service":"ready")+"'>"+esc(x.service_status==="due"?"DUE":"SOON")+"</span></button>";
+  }).join("");
+  const attentionBlock=attention
+    ? "<section class='today-section'><div class='section-head'><div><div class='eyebrow'>Needs attention</div><h2>What matters now?</h2></div></div><div class='today-tasks'>"+attention+"</div></section>"
+    : "<section class='today-section'><div class='calm-card card'><div class='calm-mark'>✓</div><div><strong>You're up to date.</strong><div class='tiny'>No service tasks currently require action.</div></div></div></section>";
+  mount("<section class='today-hero'><div><div class='eyebrow'>"+esc(state.demo?"Demo workspace":state.org?.name||"Your workspace")+"</div><h1>Good morning.<br>Let's get to work.</h1><p class='lede' style='color:#d2e1d8'>The important things are here. Everything else can stay out of the way.</p></div><div class='today-status'><span class='status-dot'></span><div><strong>Fleet operational</strong><small>"+machineCount+" machine"+(machineCount===1?"":"s")+" · "+(totalHours?Math.round(totalHours)+" recorded hours":"No hours recorded")+"</small></div></div></section>"+quickActions()+attentionBlock+"<section class='today-section'><div class='section-head'><div><div class='eyebrow'>Your Garage</div><h2>Machinery at a glance</h2></div><button class='btn secondary small' data-action='garage'>View Garage</button></div><div class='today-machine-strip'>"+(state.machines.length?state.machines.slice(0,4).map(card).join(""):"<div class='card empty'><h2>Start with your first machine.</h2><p class='lede'>Build the operational memory of your Garage.</p><button class='btn' data-action='quick-add'>Add machine</button></div>")+"</div></section>");
+}
+function quickActions(){
+  return "<div class='quick-actions'><button class='quick-action' data-action='quick-add'><span class='quick-icon'>＋</span><strong>Add machine</strong><small>Catalogue + plate</small></button><button class='quick-action' data-action='quick-hours'><span class='quick-icon'>◷</span><strong>Update hours</strong><small>Fast field entry</small></button><button class='quick-action' data-action='quick-service'><span class='quick-icon'>✓</span><strong>Record service</strong><small>Complete a task</small></button><button class='quick-action' data-action='quick-fault'><span class='quick-icon'>!</span><strong>Report problem</strong><small>Capture an issue</small></button></div>";
+}
+function renderActivity(){
+  mount("<section class='page-intro'><div class='eyebrow'>Activity</div><h1>What happened?</h1><p class='lede'>A single operational history for services, hours, faults and future mowing.</p></section><div class='card empty' style='margin-top:20px'><div class='empty-icon'>◷</div><h2>Activity foundation ready.</h2><p class='lede' style='margin:0 auto'>The next iteration will combine service, hours, faults and mowing into one searchable timeline.</p></div>");
+}
+function renderProfile(){
+  mount("<section class='page-intro'><div class='eyebrow'>Profile</div><h1>Your workspace.</h1><p class='lede'>Organisation, account and operating preferences.</p></section><div class='grid two' style='margin-top:20px'><div class='card'><div class='eyebrow'>Organisation</div><h2>"+esc(state.org?.name||"REELMOW Demo")+"</h2><p class='tiny'>"+esc(state.garage?.name||"Main Garage")+" · "+esc(state.garage?.location_name||"Field workspace")+"</p></div><div class='card'><div class='eyebrow'>Account</div><h2>"+esc(state.user?.email||"Demo user")+"</h2><p class='tiny'>Your REELMOW field workspace.</p></div></div>");
+}
+function renderCataloguePage(){
+  mount("<section class='page-intro'><div class='eyebrow'>Catalogue</div><h1>Find a machine.</h1><p class='lede'>Start with verified manufacturer, model and variant data.</p></section><div class='card' style='margin-top:20px'><button class='btn' data-action='add'>Search catalogue</button><button class='btn secondary' style='margin-left:8px' data-action='unknown-machine'>Scan model plate</button></div>");
 }
 function renderGarage(){
   const list=state.machines;
@@ -342,6 +381,20 @@ function unknownMachineModal(){
   })
 }
 
+function faultModal(){
+  const m=state.selected;
+  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Machine issue</div><h2>Report a problem.</h2><p class='tiny'>Capture it now. The Garage can resolve it later.</p></div><button class='close' data-action='close'>×</button></div><form id='fault-form'><div class='field'><label>Severity</label><select class='input' id='fault-severity'><option value='low'>Low</option><option value='medium' selected>Medium</option><option value='high'>High</option><option value='critical'>Critical</option></select></div><div class='field'><label>What is wrong?</label><textarea class='input' id='fault-description' rows='5' maxlength='4000' required placeholder='Describe what you noticed…'></textarea></div><button class='btn' style='width:100%'>Report problem</button></form></div></div>");
+  document.querySelector("#fault-form").addEventListener("submit",async e=>{
+    e.preventDefault();
+    const description=val("#fault-description"), severity=val("#fault-severity");
+    try{
+      if(state.demo){closeModal();toast("Problem reported");return}
+      const {error}=await state.client.schema("garage").from("machine_faults").insert({machine_id:m.id,severity,status:"open",description,reported_by:state.user.id});
+      if(error)throw error;
+      closeModal();toast("Problem reported");render();
+    }catch(x){toast(x.message||"Could not report problem")}
+  });
+}
 function editModal(){
   const m=state.selected;
   modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Machine details</div><h2>Edit machine.</h2><p class='tiny'>Update the physical asset record. Catalogue identity remains fixed.</p></div><button class='close' data-action='close'>×</button></div><form id='edit-machine'><div class='field'><label>Nickname</label><input class='input' id='edit-nickname' value='"+esc(m.nickname||"")+"' maxlength='80'></div><div class='field'><label>Asset number</label><input class='input' id='edit-asset' value='"+esc(m.asset_number||"")+"' maxlength='80'></div><div class='field'><label>Purchase date</label><input class='input' id='edit-date' type='date' value='"+esc(m.purchase_date||"")+"' ></div><div class='field'><label>Status</label><select class='input' id='edit-status'><option value='ready'>Ready</option><option value='service_due'>Service due</option><option value='in_service'>In service</option><option value='out_of_service'>Out of service</option><option value='retired'>Retired</option></select></div><div class='field'><label>Notes</label><textarea class='input' id='edit-notes' rows='4' maxlength='2000'>"+esc(m.notes||"")+"</textarea></div><button class='btn' style='width:100%'>Save changes</button></form></div></div>");
@@ -423,13 +476,18 @@ function loadDemo(){
 document.addEventListener("click",e=>{
   const a=e.target.closest("[data-action]");if(!a)return;
   const x=a.dataset.action;
+  if(["today","garage","catalogue","activity","profile"].includes(x))return setView(x);
+  if(x==="quick-add")return setView("catalogue");
+  if(x==="quick-hours"){if(!state.machines.length)return setView("catalogue");state.selected=state.machines[0];return hoursModal()}
+  if(x==="quick-service"){if(!state.machines.length)return setView("catalogue");state.selected=state.machines[0];return serviceModal()}
+  if(x==="quick-fault"){if(!state.machines.length)return setView("catalogue");state.selected=state.machines[0];return faultModal()}
   if(x==="connection")return connectionModal();
   if(x==="demo"){state.demo=true;localStorage.setItem(DEMO_KEY,"true");loadDemo();closeModal();return render()}
   if(x==="close")return closeModal();
   if(x==="add"){state.catalogueResults=[];return addModal()}
   if(x==="select"){const r=state.catalogueResults.find(v=>v.variant_id===a.dataset.id);if(r)machineModal(r);return}
   if(x==="open"){state.selected=state.machines.find(v=>v.id===a.dataset.id)||null;state.specs=[];return render()}
-  if(x==="back"||x==="home"){state.selected=null;state.specs=[];return render()}
+  if(x==="back"||x==="home")return setView("garage");
   if(x==="edit")return editModal();
   if(x==="hours")return hoursModal();
   if(x==="document-upload")return evidenceUploadModal("document");
@@ -437,14 +495,7 @@ document.addEventListener("click",e=>{
   if(x==="open-document")return openDocument(e.target.closest("[data-id]")?.dataset.id);
   if(x==="service")return serviceModal();
   if(x==="unknown-machine")return unknownMachineModal();
-  if(x==="search-identified"){
-    const query=a.dataset.query||"";
-    closeModal();
-    addModal();
-    const q=document.querySelector("#q");
-    if(q){q.value=query;search(query);q.focus()}
-    return;
-  }
+  if(x==="search-identified"){const query=a.dataset.query||"";closeModal();addModal();const q=document.querySelector("#q");if(q){q.value=query;search(query);q.focus()}return}
   if(x==="signup")return signUp();
 });
 boot();
