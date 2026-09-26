@@ -47,7 +47,7 @@ jobs:
           const fs = require('fs');
           const url = process.env.SUPABASE_URL || '';
           const key = process.env.SUPABASE_PUBLISHABLE_KEY || '';
-          const js = 'window.REELMOW_CONFIG = ' + JSON.stringify({ url, key }) + ';\n';
+          const js = 'window.REELMOW_CONFIG = ' + JSON.stringify({ url, key }) + ';\\n';
           fs.writeFileSync('reelmow.config.js', js, 'utf8');
           NODE
           test -n "$SUPABASE_URL"
@@ -56,8 +56,10 @@ jobs:
           node - <<'NODE'
           const fs = require('fs');
           const text = fs.readFileSync('reelmow.config.js','utf8');
-          if (!text.includes('window.REELMOW_CONFIG')) throw new Error('Runtime config was not generated correctly');
           const prefix = 'window.REELMOW_CONFIG = ';
+          if (!text.startsWith(prefix)) throw new Error('Runtime config payload missing');
+          const payload = text.slice(prefix.length).trim().replace(/;\s*$/, '');
+          const cfg = JSON.parse(payload);
           if (!cfg.url || !cfg.key) throw new Error('Supabase runtime configuration is empty');
           console.log('Runtime configuration verified for artifact:', cfg.url);
           NODE
