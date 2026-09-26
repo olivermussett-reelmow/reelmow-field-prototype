@@ -775,8 +775,14 @@ async function identifyPlate(file){
   if(state.demo){if(box)box.innerHTML="<div class='note'>Demo mode: plate scan preview. In the live build this will use AI/OCR.</div>";return}
   try{
     const data=await imageDataUrl(file);
-    const {data:result,error}=await state.client.functions.invoke("identify-machine",{body:{image_data_url:data}});
-    if(error)throw error;
+    const session=(await state.client.auth.getSession()).data.session;
+    if(!session?.access_token)throw new Error("Your REELMOW session has expired. Please sign in again.");
+    const c=cfg();
+    if(!c?.url||!c?.key)throw new Error("REELMOW is not connected to its production service.");
+    const response=await fetch(c.url+"/functions/v1/identify-machine",{method:"POST",headers:{"Authorization":"Bearer "+session.access_token,"apikey":c.key,"Content-Type":"application/json"},body:JSON.stringify({image_data_url:data})});
+    const raw=await response.text();
+    let result=null;try{result=raw?JSON.parse(raw):null}catch{}
+    if(!response.ok)throw new Error(result?.error||("Plate scanner returned HTTP "+response.status));
     if(result?.error)throw new Error(result.error);
     const set=(id,v)=>{if(v&&document.querySelector(id))document.querySelector(id).value=v};
     set("#serial",result.serial_number);
