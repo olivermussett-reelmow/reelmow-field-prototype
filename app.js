@@ -645,16 +645,7 @@ function unknownMachineModal(){
     const box=document.querySelector("#unknown-result");box.innerHTML="<div class='loading' style='padding:22px 5px'><div class='spinner'></div>Reading plate and checking catalogue…</div>";
     if(state.demo){box.innerHTML="<div class='note'><b>Demo scan:</b> In live mode REELMOW reads the plate, matches it against the catalogue and asks you to confirm the suggested variant.</div>";return}
     try{
-      const data=await imageDataUrl(file);
-      const session=(await state.client.auth.getSession()).data.session;
-      if(!session?.access_token)throw new Error("Your REELMOW session has expired. Please sign in again.");
-      const c=cfg();
-      if(!c?.url||!c?.key)throw new Error("REELMOW is not connected to its production service.");
-      const response=await fetch(c.url+"/functions/v1/identify-machine",{method:"POST",headers:{"Authorization":"Bearer "+session.access_token,"apikey":c.key,"Content-Type":"application/json"},body:JSON.stringify({image_data_url:data})});
-      const raw=await response.text();
-      let result=null;try{result=raw?JSON.parse(raw):null}catch{}
-      if(!response.ok)throw new Error(result?.error||("Plate scanner returned HTTP "+response.status));
-      if(result?.error)throw new Error(result.error);
+      const result=await identifyMachinePlate(file);
       const candidates=await matchPlateIdentification(result);
       state.pendingIdentification={serial_number:result.serial_number||null,manufacturer:result.manufacturer||null,product_family:result.product_family||null,model:result.model||null,variant:result.variant||null,visible_text:result.visible_text||"",confidence:Number(result.confidence||0),uncertainty:result.uncertainty||"",plateFile:file,candidates};
       const confidence=Math.round(Number(result.confidence||0)*100);
@@ -765,25 +756,49 @@ function machineModal(r){
   const aiReview=pending?"<div class='note' style='margin-bottom:14px'><b>REELMOW identification</b><br>"+esc([pending.manufacturer,pending.product_family,pending.model,pending.variant].filter(Boolean).join(" · ")||"Catalogue match")+" · Serial "+esc(pending.serial_number||"Not read")+"<br>Review the verified catalogue match below before adding the machine.</div>":"<div class='note' style='margin-bottom:14px'><b>Scan the machine plate</b><br>REELMOW reads the visible model and serial text, then checks it against the catalogue. You confirm the result before adding the machine.</div>";
   modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Physical machine</div><h2>"+esc(r.manufacturer_name)+" "+esc(r.model_name)+"</h2><p class='tiny'>"+esc(r.variant_name||"Variant")+" · REELMOW catalogue</p></div><button class='close' data-action='close'>×</button></div><form id='machine-form'>"+aiReview+"<div class='field'><label>Plate photo</label><input class='input' id='plate-photo' type='file' accept='image/*' capture='environment'></div><div id='plate-result'></div><div class='field'><label>Serial number</label><input class='input' id='serial'></div><div class='field'><label>Asset number</label><input class='input' id='asset'></div><div class='field'><label>Nickname</label><input class='input' id='nickname' placeholder='e.g. Main Outfield Mower'></div><div class='grid two'><div class='field'><label>Purchase date</label><input class='input' id='date' type='date'></div><div class='field'><label>Purchase price</label><input class='input' id='purchase-price' type='number' min='0' step='.01' placeholder='0.00'></div></div><div class='grid two'><div class='field'><label>Engine hours</label><input class='input' id='hours' type='number' min='0' step='.1'></div><div class='field'><label>Reel hours</label><input class='input' id='reel' type='number' min='0' step='.1'></div></div><div class='field'><label>Ownership</label><select class='input' id='ownership-type'><option value=''>Not specified</option><option value='owned'>Owned</option><option value='leased'>Leased</option><option value='hired'>Hired</option><option value='loaned'>Loaned</option><option value='other'>Other</option></select></div><div class='field'><label>Owner / supplier</label><input class='input' id='ownership-name'></div><div class='grid two'><div class='field'><label>Warranty start</label><input class='input' id='warranty-start' type='date'></div><div class='field'><label>Warranty end</label><input class='input' id='warranty-end' type='date'></div></div><div class='field'><label>Warranty provider</label><input class='input' id='warranty-provider' placeholder='Dealer / manufacturer'></div><div class='field'><label>Notes</label><textarea class='input' id='machine-notes' rows='3'></textarea></div><div class='note'>This physical asset will be linked to the verified catalogue variant.</div><button class='btn' style='width:100%;margin-top:14px'>Add to Garage</button></form></div></div>");
   document.querySelector("#machine-form").addEventListener("submit",e=>saveMachine(e,r));
-  if(pending?.serial_number){document.querySelector("#serial").value=pending.serial_number;state.pendingPlateFile=pending.plateFile||null}
+  if(pending?.serial_number)document.querySelector("#serial").value=pending.serial_number;
+  if(pending?.plateFile)state.pendingPlateFile=pending.plateFile;
   document.querySelector("#plate-photo").addEventListener("change",e=>identifyPlate(e.target.files?.[0]))
+}
+async function identifyMachinePlate(file){
+  if(!file)throw new Error("Please choose a machine plate image.");
+  const data=await imageDataUrl(file);
+  const {data:result,error}=await state.client.functions.invoke("identify-machine",{body:{image_data_url:data}});
+  if(error)throw new Error(error.message||"The plate scanner could not be reached.");
+  if(!result||typeof result!=="object")throw new Error("The plate scanner returned an invalid response.");
+  if(result.error)throw new Error(result.error);
+  return result;
+}
+async function matchPlateIdentification(result){
+  const {data,error}=await state.client.schema("catalogue").rpc("match_machine_identification",{
+    manufacturer_text:result.manufacturer||null,
+    product_family_text:result.product_family||null,
+    model_text:result.model||null,
+    variant_text:result.variant||null,
+    serial_number_text:result.serial_number||null,
+    visible_text:result.visible_text||null,
+    result_limit:6
+  });
+  if(error)throw error;
+  return data||[];
+}
+function identificationCard(candidate,index){
+  const pct=Math.round(Number(candidate.rank||0)*100);
+  const reasons=candidate.match_reasons||{};
+  const reasonText=[
+    reasons.manufacturer_exact?"manufacturer":"",reasons.model_exact?"model":"",reasons.variant_exact?"variant":"",
+    reasons.serial_prefix?"serial prefix":""
+  ].filter(Boolean).join(" · ");
+  return "<div class='result' style='display:block'><div style='display:flex;justify-content:space-between;gap:10px;align-items:flex-start'><div><div class='result-name'>"+esc((candidate.manufacturer_name||"")+" "+(candidate.model_name||""))+"</div><div class='result-meta'>"+esc(candidate.variant_name||"Variant")+" · "+esc(candidate.machine_type||"Machine")+"</div></div><span class='tiny'>"+pct+"%</span></div>"+(reasonText?"<div class='tiny' style='margin-top:6px'>Matched: "+esc(reasonText)+"</div>":"")+"<button class='btn small' style='width:100%;margin-top:10px' data-action='accept-identified' data-index='"+index+"'>Use this machine</button></div>";
 }
 async function identifyPlate(file){
   if(!file)return;
   state.pendingPlateFile=file;
-  const box=document.querySelector("#plate-result");if(box)box.innerHTML="<div class='note'>Reading plate…</div>";
+  const box=document.querySelector("#plate-result");if(box)box.innerHTML="<div class='note'>Reading plate and checking catalogue…</div>";
   if(state.demo){if(box)box.innerHTML="<div class='note'>Demo mode: plate scan preview. In the live build this will use AI/OCR.</div>";return}
   try{
-    const data=await imageDataUrl(file);
-    const session=(await state.client.auth.getSession()).data.session;
-    if(!session?.access_token)throw new Error("Your REELMOW session has expired. Please sign in again.");
-    const c=cfg();
-    if(!c?.url||!c?.key)throw new Error("REELMOW is not connected to its production service.");
-    const response=await fetch(c.url+"/functions/v1/identify-machine",{method:"POST",headers:{"Authorization":"Bearer "+session.access_token,"apikey":c.key,"Content-Type":"application/json"},body:JSON.stringify({image_data_url:data})});
-    const raw=await response.text();
-    let result=null;try{result=raw?JSON.parse(raw):null}catch{}
-    if(!response.ok)throw new Error(result?.error||("Plate scanner returned HTTP "+response.status));
-    if(result?.error)throw new Error(result.error);
+    const result=await identifyMachinePlate(file);
+    state.pendingIdentification={serial_number:result.serial_number||null,manufacturer:result.manufacturer||null,product_family:result.product_family||null,model:result.model||null,variant:result.variant||null,visible_text:result.visible_text||"",confidence:Number(result.confidence||0),uncertainty:result.uncertainty||"",plateFile:file,candidates:[]};
     const set=(id,v)=>{if(v&&document.querySelector(id))document.querySelector(id).value=v};
     set("#serial",result.serial_number);
     const confidence=Math.round(Number(result.confidence||0)*100);
