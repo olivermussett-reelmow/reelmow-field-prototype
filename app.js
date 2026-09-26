@@ -429,6 +429,12 @@ async function saveEvidence(e,kind){
   }catch(x){toast(x.message||"Upload failed")}
 }
 function isPhotoText(kind){return kind==="photo"?"Photo":"Document"}
+async function openServiceEvidence(id){
+  const r=state.serviceRecords.find(x=>x.id===id);const e=r?.evidence;if(!e?.storage_path)return toast("No evidence attached");
+  if(state.demo)return toast("Demo evidence preview");
+  const {data,error}=await state.client.storage.from(e.storage_bucket||"reelmow-garage-private").createSignedUrl(e.storage_path,3600);
+  if(error)return toast(error.message);window.open(data.signedUrl,"_blank","noopener,noreferrer")
+}
 async function openDocument(id){
   const d=state.machineDocuments?.find(x=>x.id===id);if(!d)return;
   if(state.demo)return toast("Demo document preview");
@@ -448,7 +454,7 @@ function serviceDueHtml(){
 }
 function serviceHistoryHtml(){
   if(!state.serviceRecords.length)return "<div class='empty-mini'><div class='tiny'>No service records yet.</div><button class='btn secondary small' style='margin-top:10px' data-action='service'>Record the first service</button></div>";
-  return "<div class='list'>"+state.serviceRecords.map(x=>"<div class='list-row'><div><div class='list-title'>"+esc(x.task_name||"Service record")+"</div><div class='list-meta'>"+esc(new Date(x.serviced_at).toLocaleDateString())+" · "+(x.engine_hours!=null?esc(x.engine_hours)+" h":"hours not recorded")+(x.cost!=null?" · £"+Number(x.cost).toFixed(2):"")+"</div>"+(x.notes?"<div class='list-meta' style='margin-top:4px'>"+esc(x.notes)+"</div>":"")+"</div></div>").join("")+"</div>"
+  return "<div class='list'>"+state.serviceRecords.map(x=>"<div class='list-row'><div><div class='list-title'>"+esc(x.task_name||"Service record")+"</div><div class='list-meta'>"+esc(new Date(x.serviced_at).toLocaleDateString())+" · "+(x.engine_hours!=null?esc(x.engine_hours)+" h":"hours not recorded")+(x.cost!=null?" · £"+Number(x.cost).toFixed(2):"")+"</div>"+(x.performed_by?"<div class='list-meta'>By "+esc(x.performed_by)+"</div>":"")+(x.notes?"<div class='list-meta' style='margin-top:4px'>"+esc(x.notes)+"</div>":"")+(x.evidence?.storage_path?"<button class='btn ghost small' style='margin-top:7px' data-action='open-service-evidence' data-id='"+esc(x.id)+"'>Open evidence</button>":"")+"</div></div>").join("")+"</div>"
 }
 async function loadServiceData(m){
   if(state.demo){
@@ -463,7 +469,7 @@ async function loadServiceData(m){
   }else{
     const [due,rec]=await Promise.all([
       state.client.schema("garage").from("machine_service_due").select("*").eq("machine_id",m.id).order("service_status").order("task_name"),
-      state.client.schema("garage").from("machine_service_records").select("id,serviced_at,engine_hours,reel_hours,performed_by,cost,notes,service_task_id").eq("machine_id",m.id).order("serviced_at",{ascending:false}).limit(20)
+      state.client.schema("garage").from("machine_service_records").select("id,serviced_at,engine_hours,reel_hours,performed_by,cost,notes,service_task_id,evidence").eq("machine_id",m.id).order("serviced_at",{ascending:false}).limit(20)
     ]);
     if(due.error)return toast(due.error.message);
     if(rec.error)return toast(rec.error.message);
