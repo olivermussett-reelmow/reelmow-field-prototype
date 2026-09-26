@@ -178,7 +178,7 @@ function renderGarageSetup(){
 }
 function card(m){
   const n=m.model?.model_name||"Machine",v=m.variant?.variant_name||"Catalogue variant";
-  return "<article class='card machine-card' data-action='open' data-id='"+esc(m.id)+"'><div class='machine-visual'><div class='glyph'>⚙︎</div></div><div class='machine-name'>"+esc(m.nickname||n)+"</div><div class='machine-sub'>"+esc(m.manufacturer?.name||"Manufacturer")+" · "+esc(v)+"</div><div class='machine-meta'><span class='badge "+(m.status==="service_due"?"service":"ready")+"'>"+esc((m.status||"ready").replaceAll("_"," "))+"</span><span class='tiny'>"+(m.current_engine_hours!=null?esc(m.current_engine_hours)+" h":"No hours")+"</span></div></article>"
+  return "<article class='card machine-card' data-action='open' data-id='"+esc(m.id)+"'><div class='machine-visual'><div class='glyph'>⚙︎</div></div><div class='machine-name'>"+esc(m.nickname||n)+"</div><div class='machine-sub'>"+esc(m.manufacturer?.name||"Manufacturer")+" · "+esc(v)+"</div><div class='machine-meta'><span class='badge "+statusClass(m.status)+"'>"+esc(statusLabel(m.status))+"</span><span class='tiny'>"+(m.current_engine_hours!=null?esc(m.current_engine_hours)+" h":"No hours")+"</span></div></article>"
 }
 function renderToday(){
   const due=(state.dashboardDue||[]).filter(x=>x.service_status==="due"||x.service_status==="upcoming");
@@ -339,7 +339,7 @@ function renderDetail(){
   loadSpecs(m);loadServiceData(m);loadEvidence(m);loadMachineFaults(m)
 }
 function statusLabel(status){return String(status||"ready").replaceAll("_"," ").replace(/\b\w/g,c=>c.toUpperCase())}
-function statusClass(status){return status==="service_due"||status==="out_of_service"?"service":status==="in_service"?"fault":status==="repaired"?"ready":"ready"}
+function statusClass(status){return status==="service_due"||status==="out_of_service"?"service":status==="in_service"?"fault":status==="retired"?"retired":"ready"}
 function faultHtml(){
   if(!state.machineFaults.length)return "<div class='empty-mini'><div class='tiny'>No reported problems.</div></div>";
   return "<div class='list'>"+state.machineFaults.map(x=>{
@@ -448,10 +448,11 @@ async function saveEvidence(e,kind){
   const m=state.selected,file=document.querySelector("#evidence-file")?.files?.[0],title=val("#evidence-title");
   if(!file)return;
   if(state.demo){closeModal();toast("Demo mode: upload preview only");return}
+  let path=null,bucket="reelmow-garage-private";
   try{
     const org=state.org.id, ext=(file.name.split(".").pop()||"bin").toLowerCase();
-    const path="org/"+org+"/machines/"+m.id+"/"+Date.now()+"-"+crypto.randomUUID()+"."+ext;
-    const bucket="reelmow-garage-private";
+    path="org/"+org+"/machines/"+m.id+"/"+Date.now()+"-"+crypto.randomUUID()+"."+ext;
+    if(file.size>25_000_000)throw new Error("Files must be under 25 MB.");
     const up=await state.client.storage.from(bucket).upload(path,file,{contentType:file.type||"application/octet-stream",upsert:false});
     if(up.error)throw up.error;
     if(kind==="photo"){
@@ -462,7 +463,10 @@ async function saveEvidence(e,kind){
       if(error)throw error;
     }
     closeModal();await loadEvidence(m);toast(isPhotoText(kind)+" added");
-  }catch(x){toast(x.message||"Upload failed")}
+  }catch(x){
+    if(path)try{await state.client.storage.from(bucket).remove([path])}catch{}
+    toast(x.message||"Upload failed")
+  }
 }
 function isPhotoText(kind){return kind==="photo"?"Photo":"Document"}
 async function openServiceEvidence(id){
@@ -707,7 +711,7 @@ async function identifyPlate(file){
   }catch(x){if(box)box.innerHTML="<div class='error'>"+esc(x.message||"Plate scan failed")+"</div>"}
 }
 async function saveMachine(e,r){
-  e.preventDefault();
+  e.preventDefault();if(!canOperate())return toast("Your role is read-only.");
   const serial=val("#serial"),asset=val("#asset"),nickname=val("#nickname"),purchaseDate=val("#date"),purchasePrice=num("#purchase-price"),warrantyStart=val("#warranty-start"),warrantyEnd=val("#warranty-end"),warrantyProvider=val("#warranty-provider"),ownershipType=val("#ownership-type")||null,ownershipName=val("#ownership-name"),notes=val("#machine-notes"),engineHours=num("#hours"),reelHours=num("#reel");
   if(engineHours!=null&&engineHours<0||reelHours!=null&&reelHours<0){toast("Hours cannot be negative");return}
   const p={garage_id:state.garage.id,machine_variant_id:r.variant_id,serial_number:serial||null,asset_number:asset||null,nickname:nickname||null,purchase_date:purchaseDate||null,purchase_price:purchasePrice,warranty_start_date:warrantyStart||null,warranty_end_date:warrantyEnd||null,warranty_provider:warrantyProvider||null,ownership_type:ownershipType,ownership_name:ownershipName||null,notes:notes||null,current_engine_hours:engineHours,current_reel_hours:reelHours,created_by:state.user?.id||null};
