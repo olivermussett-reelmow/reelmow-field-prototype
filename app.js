@@ -15,7 +15,7 @@ const demoCatalogue=[
   {model_id:"demo-allett-shaver",manufacturer_name:"Allett",model_name:"Shaver",variant_id:"demo-allett-shaver-24",variant_name:"Shaver 24",machine_type:"Cylinder Mower",rank:.97},
   {model_id:"demo-atco-royale",manufacturer_name:"Atco",model_name:"Royale 24",variant_id:"demo-atco-royale-ic",variant_name:"Royale 24 I/C - F016310542",machine_type:"Cylinder Mower",rank:.96}
 ];
-const state={client:null,user:null,org:null,garage:null,machines:[],selected:null,specs:[],serviceDue:[],serviceRecords:[],hoursLog:[],catalogueResults:[],dashboardDue:[],openFaults:[],machineFaults:[],activity:[],mow:{active:false,paused:false,sessionId:null,machineId:null,watchId:null,startedAt:null,lastPoint:null,distanceM:0,points:0,accuracyM:null,speedMps:null,headingDeg:null,pattern:"stripe",targetSpeedKph:null},loading:false,error:"",pendingPlateFile:null,quickAction:null,view:localStorage.getItem("reelmow.view.v1")||"today",demo:localStorage.getItem(DEMO_KEY)==="true" && !(window.REELMOW_CONFIG?.url && window.REELMOW_CONFIG?.key)};
+const state={client:null,user:null,org:null,garage:null,machines:[],selected:null,specs:[],serviceDue:[],serviceRecords:[],hoursLog:[],catalogueResults:[],dashboardDue:[],openFaults:[],machineFaults:[],activity:[],mow:{active:false,paused:false,sessionId:null,machineId:null,watchId:null,startedAt:null,lastPoint:null,trackPoints:[],distanceM:0,points:0,accuracyM:null,speedMps:null,headingDeg:null,pattern:"stripe",targetSpeedKph:null},loading:false,error:"",pendingPlateFile:null,quickAction:null,view:localStorage.getItem("reelmow.view.v1")||"today",demo:localStorage.getItem(DEMO_KEY)==="true" && !(window.REELMOW_CONFIG?.url && window.REELMOW_CONFIG?.key)};
 
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const val=s=>document.querySelector(s)?.value.trim()||"";
@@ -179,12 +179,21 @@ function formatElapsed(start){
   const s=Math.max(0,Math.floor((Date.now()-new Date(start).getTime())/1000));
   return String(Math.floor(s/3600)).padStart(2,"0")+":"+String(Math.floor((s%3600)/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0");
 }
+function trackSvg(){
+  const pts=state.mow.trackPoints||[];
+  if(pts.length<2)return "";
+  const lats=pts.map(p=>p.latitude),lons=pts.map(p=>p.longitude);
+  const minLat=Math.min(...lats),maxLat=Math.max(...lats),minLon=Math.min(...lons),maxLon=Math.max(...lons);
+  const latSpan=Math.max(maxLat-minLat,0.00001),lonSpan=Math.max(maxLon-minLon,0.00001);
+  const xy=pts.map(p=>[20+((p.longitude-minLon)/lonSpan)*360,220-((p.latitude-minLat)/latSpan)*200]);
+  return "<svg class='mow-track' viewBox='0 0 400 240' preserveAspectRatio='none' aria-label='Recorded mowing track'><polyline points='"+xy.map(p=>p.join(",")).join(" ")+"' /></svg>";
+}
 function renderMowScreen(){
   const m=state.machines.find(x=>x.id===state.mow.machineId);
   const elapsed=state.mow.startedAt?formatElapsed(state.mow.startedAt):"00:00:00";
   const speed=state.mow.speedMps!=null?(state.mow.speedMps*3.6).toFixed(1):"—";
   const distance=(state.mow.distanceM/1000).toFixed(2);
-  mount("<section class='mow-screen'><div class='mow-top'><div><div class='eyebrow'>Mow Mode</div><h1>"+esc(m?.nickname||m?.model?.model_name||"Machine")+"</h1><div class='tiny'>"+esc(m?.manufacturer?.name||"")+" · "+esc(m?.variant?.variant_name||"")+"</div></div><button class='btn ghost small' data-action='exit-mow'>Exit</button></div><div class='mow-live-card'><div class='mow-live-state'><span class='mow-live-dot "+(state.mow.paused?"paused":"")+"'></span><strong>"+(state.mow.paused?"PAUSED":"TRACKING")+"</strong><small>"+(state.mow.accuracyM!=null?"GPS ±"+Math.round(state.mow.accuracyM)+" m":"Waiting for GPS…")+"</small></div><div class='mow-metrics'><div><span>"+elapsed+"</span><small>Time</small></div><div><span>"+distance+" km</span><small>Distance</small></div><div><span>"+speed+"</span><small>Speed km/h</small></div></div><div class='mow-target'><span>Pattern</span><strong>"+esc(state.mow.pattern.replace("_"," "))+"</strong><span>Target "+(state.mow.targetSpeedKph!=null?esc(state.mow.targetSpeedKph)+" km/h":"not set")+"</span></div></div><div class='mow-map'><div class='mow-crosshair'>⌖</div><div class='mow-map-copy'><strong>"+(state.mow.points?"Track recording":"Waiting for first position")+"</strong><small>"+state.mow.points+" GPS point"+(state.mow.points===1?"":"s")+" recorded</small></div></div><div class='mow-controls'><button class='btn secondary' data-action='mow-pause'>"+(state.mow.paused?"Resume":"Pause")+"</button><button class='btn mow-stop' data-action='mow-stop'>Finish mow</button></div></section>");
+  mount("<section class='mow-screen'><div class='mow-top'><div><div class='eyebrow'>Mow Mode</div><h1>"+esc(m?.nickname||m?.model?.model_name||"Machine")+"</h1><div class='tiny'>"+esc(m?.manufacturer?.name||"")+" · "+esc(m?.variant?.variant_name||"")+"</div></div><button class='btn ghost small' data-action='exit-mow'>Exit</button></div><div class='mow-live-card'><div class='mow-live-state'><span class='mow-live-dot "+(state.mow.paused?"paused":"")+"'></span><strong>"+(state.mow.paused?"PAUSED":"TRACKING")+"</strong><small>"+(state.mow.accuracyM!=null?"GPS ±"+Math.round(state.mow.accuracyM)+" m":"Waiting for GPS…")+"</small></div><div class='mow-metrics'><div><span>"+elapsed+"</span><small>Time</small></div><div><span>"+distance+" km</span><small>Distance</small></div><div><span>"+speed+"</span><small>Speed km/h</small></div></div><div class='mow-target'><span>Pattern</span><strong>"+esc(state.mow.pattern.replace("_"," "))+"</strong><span>Target "+(state.mow.targetSpeedKph!=null?esc(state.mow.targetSpeedKph)+" km/h":"not set")+"</span></div></div><div class='mow-map>"+trackSvg()+"<div class='mow-crosshair'>⌖</div><div class='mow-map-copy'><strong>"+(state.mow.points?"Track recording":"Waiting for first position")+"</strong><small>"+state.mow.points+" GPS point"+(state.mow.points===1?"":"s")+" recorded</small></div></div><div class='mow-controls'><button class='btn secondary' data-action='mow-pause'>"+(state.mow.paused?"Resume":"Pause")+"</button><button class='btn mow-stop' data-action='mow-stop'>Finish mow</button></div></section>");
 }
 function machinePicker(action){
   if(!state.machines.length)return setView("catalogue");
@@ -483,7 +492,7 @@ function unknownMachineModal(){
 async function startMow(machineId){
   if(!navigator.geolocation)return toast("Location is not available on this device.");
   const m=state.machines.find(x=>x.id===machineId);if(!m)return;
-  state.mow={active:true,paused:false,sessionId:null,machineId,watchId:null,startedAt:new Date().toISOString(),lastPoint:null,distanceM:0,points:0,accuracyM:null,speedMps:null,headingDeg:null,pattern:"stripe",targetSpeedKph:null};
+  state.mow={active:true,paused:false,sessionId:null,machineId,watchId:null,startedAt:new Date().toISOString(),lastPoint:null,trackPoints:[],distanceM:0,points:0,accuracyM:null,speedMps:null,headingDeg:null,pattern:"stripe",targetSpeedKph:null};
   renderMowScreen();
   if(state.demo){state.mow.sessionId="demo-"+crypto.randomUUID();startMowGps();return}
   try{
@@ -498,7 +507,7 @@ function startMowGps(){
     const p={latitude:pos.coords.latitude,longitude:pos.coords.longitude};
     state.mow.accuracyM=pos.coords.accuracy??null;state.mow.speedMps=pos.coords.speed??null;state.mow.headingDeg=pos.coords.heading??null;
     if(state.mow.lastPoint)state.mow.distanceM+=haversineM(state.mow.lastPoint,p);
-    state.mow.lastPoint=p;state.mow.points++;
+    state.mow.lastPoint=p;state.mow.trackPoints.push(p);state.mow.points++;
     if(!state.demo&&state.mow.sessionId){
       const {error}=await state.client.schema("garage").from("mowing_track_points").insert({session_id:state.mow.sessionId,latitude:p.latitude,longitude:p.longitude,accuracy_m:pos.coords.accuracy,speed_mps:pos.coords.speed,heading_deg:pos.coords.heading});
       if(error)toast("GPS point could not be saved.");
@@ -517,7 +526,7 @@ async function finishMow(){
     const {error}=await state.client.schema("garage").from("mowing_sessions").update({ended_at:new Date().toISOString(),status:"completed",distance_m:m.distanceM,average_speed_kph:avg}).eq("id",m.sessionId);
     if(error)toast(error.message||"Mow session saved with warnings");
   }
-  state.mow={active:false,paused:false,sessionId:null,machineId:null,watchId:null,startedAt:null,lastPoint:null,distanceM:0,points:0,accuracyM:null,speedMps:null,headingDeg:null,pattern:"stripe",targetSpeedKph:null};
+  state.mow={active:false,paused:false,sessionId:null,machineId:null,watchId:null,startedAt:null,lastPoint:null,trackPoints:[],distanceM:0,points:0,accuracyM:null,speedMps:null,headingDeg:null,pattern:"stripe",targetSpeedKph:null};
   toast("Mow session saved");setView("today");
 }
 function pauseMow(){
