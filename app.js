@@ -727,39 +727,4 @@ async function identifyPlate(file){
     const note=top?"<br><b>Catalogue check:</b> "+esc(top.manufacturer_name+" "+top.model_name+" · "+(top.variant_name||"Variant"))+" · "+Math.round(Number(top.rank||0)*100)+"%"+(same?" · matches selected variant":" · review suggested variant"):"<br><b>Catalogue check:</b> no verified match";
     if(box)box.innerHTML="<div class='note'><b>AI read:</b> "+esc([result.manufacturer,result.model,result.variant].filter(Boolean).join(" · ")||"No model identified")+"<br>Serial "+esc(result.serial_number||"Not read")+" · Confidence "+confidence+"%"+(result.uncertainty?" · "+esc(result.uncertainty):"")+note+"</div>";
   }catch(x){if(box)box.innerHTML="<div class='error'>"+esc(x.message||"Plate scan failed")+"</div>"}
-}async function saveMachine(e,r){
-  e.preventDefault();if(!canOperate())return toast("Your role is read-only.");
-  const serial=val("#serial"),asset=val("#asset"),nickname=val("#nickname"),purchaseDate=val("#date"),purchasePrice=num("#purchase-price"),warrantyStart=val("#warranty-start"),warrantyEnd=val("#warranty-end"),warrantyProvider=val("#warranty-provider"),ownershipType=val("#ownership-type")||null,ownershipName=val("#ownership-name"),notes=val("#machine-notes"),engineHours=num("#hours"),reelHours=num("#reel");
-  if(engineHours!=null&&engineHours<0||reelHours!=null&&reelHours<0){toast("Hours cannot be negative");return}
-  if(state.demo){state.machines.unshift({id:crypto.randomUUID(),garage_id:state.garage.id,machine_variant_id:r.variant_id,serial_number:serial||null,asset_number:asset||null,nickname:nickname||null,purchase_date:purchaseDate||null,purchase_price:purchasePrice,current_engine_hours:engineHours,current_reel_hours:reelHours,status:"ready",variant:{variant_name:r.variant_name},model:{model_name:r.model_name},manufacturer:{name:r.manufacturer_name}});closeModal();toast("Machine added to Garage");return render()}
-  let uploadedPath=null;
-  try{
-    const machineId=crypto.randomUUID(),file=state.pendingPlateFile;
-    if(file){
-      const bucket="reelmow-garage-private";
-      uploadedPath="org/"+state.org.id+"/machines/"+machineId+"/"+Date.now()+"-"+crypto.randomUUID()+".jpg";
-      const resized=await imageDataUrl(file,1800,.84);
-      const blob=await (await fetch(resized)).blob();
-      const up=await state.client.storage.from(bucket).upload(uploadedPath,blob,{contentType:"image/jpeg",upsert:false});
-      if(up.error)throw new Error("Plate evidence could not be uploaded. The machine was not added.");
-    }
-    const {data:created,error}=await state.client.schema("garage").rpc("create_machine",{
-      p_machine_id:machineId,p_garage_id:state.garage.id,p_machine_variant_id:r.variant_id,
-      p_serial_number:serial||null,p_asset_number:asset||null,p_nickname:nickname||null,p_purchase_date:purchaseDate||null,
-      p_purchase_price:purchasePrice,p_warranty_start_date:warrantyStart||null,p_warranty_end_date:warrantyEnd||null,
-      p_warranty_provider:warrantyProvider||null,p_ownership_type:ownershipType,p_ownership_name:ownershipName||null,
-      p_notes:notes||null,p_current_engine_hours:engineHours,p_current_reel_hours:reelHours,
-      p_photo_bucket:uploadedPath?"reelmow-garage-private":null,p_photo_path:uploadedPath,p_photo_caption:"Machine model / serial plate",
-      p_photo_mime_type:file?.type||"image/jpeg",p_photo_file_size:file?.size||null,
-      p_photo_metadata:{source:"plate_scan",ai_confidence:state.pendingIdentification?.confidence??null,ai_reading:{
-        manufacturer:state.pendingIdentification?.manufacturer||null,model:state.pendingIdentification?.model||null,
-        variant:state.pendingIdentification?.variant||null,serial_number:state.pendingIdentification?.serial_number||null
-      }}
-    });
-    if(error)throw error;
-    state.pendingPlateFile=null;state.pendingIdentification=null;closeModal();await loadMachines();toast("Machine added to Garage");render()
-  }catch(x){
-    if(uploadedPath)await state.client.storage.from("reelmow-garage-private").remove([uploadedPath]).catch(()=>{});
-    toast(x.message||"Could not add machine")
-  }
 }
