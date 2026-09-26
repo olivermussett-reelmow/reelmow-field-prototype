@@ -161,3 +161,5 @@
   .mow-map{height:calc(100vh - 500px);min-height:240px;max-height:430px;border-radius:23px}
   .mow-metrics span{font-size:20px}
 }
+
+.mow-track{position:absolute;inset:0;width:100%;height:100%;z-index:1}.mow-track polyline{fill:none;stroke:var(--green);stroke-width:4;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 2px 2px rgba(11,51,36,.18))}.mow-map .mow-crosshair{z-index:2}
