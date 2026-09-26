@@ -714,119 +714,17 @@ function machineModal(r){
 async function identifyPlate(file){
   if(!file)return;
   state.pendingPlateFile=file;
-  const box=document.querySelector("#plate-result");if(box)box.innerHTML="<div class='note'>Reading plate…</div>";
-  if(state.demo){if(box)box.innerHTML="<div class='note'>Demo mode: plate scan preview. In the live build this will use AI/OCR.</div>";return}
+  const box=document.querySelector("#plate-result");if(box)box.innerHTML="<div class='note'>Reading plate and checking catalogue…</div>";
+  if(state.demo){if(box)box.innerHTML="<div class='note'>Demo mode: live plate identification and catalogue matching are available on the connected Garage.</div>";return}
   try{
     const data=await imageDataUrl(file);
     const {data:result,error}=await state.client.functions.invoke("identify-machine",{body:{image_data_url:data}});
-    if(error)throw error;
-    if(result?.error)throw new Error(result.error);
-    const set=(id,v)=>{if(v&&document.querySelector(id))document.querySelector(id).value=v};
-    set("#serial",result.serial_number);
-    const confidence=Math.round(Number(result.confidence||0)*100);
-    if(box)box.innerHTML="<div class='note'><b>AI read:</b> "+esc([result.manufacturer,result.model,result.variant].filter(Boolean).join(" · ")||"No model identified")+"<br>Confidence "+confidence+"%"+(result.uncertainty?" · "+esc(result.uncertainty):"")+"</div>";
+    if(error)throw error;if(result?.error)throw new Error(result.error);
+    const candidates=await matchPlateIdentification(result);
+    state.pendingIdentification={...(state.pendingIdentification||{}),serial_number:result.serial_number||null,manufacturer:result.manufacturer||null,product_family:result.product_family||null,model:result.model||null,variant:result.variant||null,visible_text:result.visible_text||"",confidence:Number(result.confidence||0),uncertainty:result.uncertainty||"",plateFile:file,candidates};
+    if(result.serial_number)document.querySelector("#serial").value=result.serial_number;
+    const confidence=Math.round(Number(result.confidence||0)*100),top=candidates[0],same=top&&top.variant_id===state.pendingCatalogueVariantId;
+    const note=top?"<br><b>Catalogue check:</b> "+esc(top.manufacturer_name+" "+top.model_name+" · "+(top.variant_name||"Variant"))+" · "+Math.round(Number(top.rank||0)*100)+"%"+(same?" · matches selected variant":" · review suggested variant"):"<br><b>Catalogue check:</b> no verified match";
+    if(box)box.innerHTML="<div class='note'><b>AI read:</b> "+esc([result.manufacturer,result.model,result.variant].filter(Boolean).join(" · ")||"No model identified")+"<br>Serial "+esc(result.serial_number||"Not read")+" · Confidence "+confidence+"%"+(result.uncertainty?" · "+esc(result.uncertainty):"")+note+"</div>";
   }catch(x){if(box)box.innerHTML="<div class='error'>"+esc(x.message||"Plate scan failed")+"</div>"}
 }
-async function saveMachine(e,r){
-  e.preventDefault();if(!canOperate())return toast("Your role is read-only.");
-  const serial=val("#serial"),asset=val("#asset"),nickname=val("#nickname"),purchaseDate=val("#date"),purchasePrice=num("#purchase-price"),warrantyStart=val("#warranty-start"),warrantyEnd=val("#warranty-end"),warrantyProvider=val("#warranty-provider"),ownershipType=val("#ownership-type")||null,ownershipName=val("#ownership-name"),notes=val("#machine-notes"),engineHours=num("#hours"),reelHours=num("#reel");
-  if(engineHours!=null&&engineHours<0||reelHours!=null&&reelHours<0){toast("Hours cannot be negative");return}
-  const p={garage_id:state.garage.id,machine_variant_id:r.variant_id,serial_number:serial||null,asset_number:asset||null,nickname:nickname||null,purchase_date:purchaseDate||null,purchase_price:purchasePrice,warranty_start_date:warrantyStart||null,warranty_end_date:warrantyEnd||null,warranty_provider:warrantyProvider||null,ownership_type:ownershipType,ownership_name:ownershipName||null,notes:notes||null,current_engine_hours:engineHours,current_reel_hours:reelHours,created_by:state.user?.id||null};
-  if(state.demo){state.machines.unshift({...p,id:crypto.randomUUID(),status:"ready",variant:{variant_name:r.variant_name},model:{model_name:r.model_name},manufacturer:{name:r.manufacturer_name}});closeModal();toast("Machine added to Garage");return render()}
-  try{
-    if(serial){
-      const {data:duplicate,error:de}=await state.client.schema("garage").from("machines").select("id").eq("garage_id",state.garage.id).ilike("serial_number",serial).limit(1);
-      if(de)throw de;
-      if(duplicate?.length){throw new Error("A machine with this serial number is already in this Garage.");}
-    }
-    const {data:created,error}=await state.client.schema("garage").from("machines").insert(p).select("id").single();
-    if(error)throw error;
-    if(state.pendingPlateFile){
-      const file=state.pendingPlateFile,bucket="reelmow-garage-private",path="org/"+state.org.id+"/machines/"+created.id+"/"+Date.now()+"-"+crypto.randomUUID()+".jpg";
-      const resized=await imageDataUrl(file,1800,.84);
-      const blob=await (await fetch(resized)).blob();
-      const up=await state.client.storage.from(bucket).upload(path,blob,{contentType:"image/jpeg",upsert:false});
-      if(!up.error){
-        const {error:pe}=await state.client.schema("garage").from("machine_photos").insert({
-          machine_id:created.id,storage_bucket:bucket,storage_path:path,caption:"Machine model / serial plate",photo_type:"serial_plate",
-          mime_type:file.type||"image/jpeg",file_size_bytes:file.size,captured_at:new Date().toISOString(),created_by:state.user?.id||null
-        });
-        if(pe)toast("Machine added, but plate evidence could not be saved.");
-      }else toast("Machine added, but plate photo upload failed.");
-    }
-    state.pendingPlateFile=null;closeModal();await loadMachines();toast("Machine added to Garage");render()
-  }catch(x){toast(x.message||"Could not add machine")}
-}
-async function createOrg(e){
-  e.preventDefault();try{const {data,error}=await state.client.schema("garage").rpc("create_organization",{org_name:val("#org-name"),org_slug:slug(val("#org-name"))+"-"+Math.random().toString(36).slice(2,7)});if(error)throw error;const {error:g}=await state.client.schema("garage").from("garages").insert({organization_id:data,name:val("#garage-name"),location_name:val("#garage-location")});if(g)throw g;await loadWorkspace();render()}catch(x){state.error=x.message;render()}
-}
-async function createGarage(e){
-  e.preventDefault();try{const {error}=await state.client.schema("garage").from("garages").insert({organization_id:state.org.id,name:val("#garage-name"),location_name:val("#garage-location")});if(error)throw error;await loadWorkspace();render()}catch(x){toast(x.message)}
-}
-async function signIn(e){
-  e.preventDefault();try{const {error}=await state.client.auth.signInWithPassword({email:val("#email"),password:document.querySelector("#password").value});if(error)throw error;await boot()}catch(x){state.error=x.message;render()}
-}
-async function signUp(){
-  try{const {data,error}=await state.client.auth.signUp({email:val("#email"),password:document.querySelector("#password").value});if(error)throw error;if(!data.session)toast("Account created. Check your email to confirm.");else await boot()}catch(x){state.error=x.message;render()}
-}
-function connectionModal(){
-  const c=cfg()||{url:"",key:""};
-  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Supabase connection</div><h2>Connect REELMOW.</h2><p class='tiny'>Use the project URL and publishable public key. Never use a secret/service-role key in the browser.</p></div><button class='close' data-action='close'>×</button></div><form id='connect-form'><div class='field'><label>Project URL</label><input class='input' id='sb-url' value='"+esc(c.url)+"' placeholder='https://your-project.supabase.co' required></div><div class='field'><label>Publishable key</label><input class='input' id='sb-key' value='"+esc(c.key)+"' placeholder='eyJ...' required></div><div class='note'>The publishable key is stored locally by this prototype. RLS remains the database security boundary.</div><div class='actions' style='margin-top:15px'><button class='btn'>Connect</button><button class='btn secondary' type='button' data-action='demo'>Preview demo</button></div></form></div></div>");
-  document.querySelector("#connect-form").addEventListener("submit",async e=>{e.preventDefault();localStorage.setItem(CONFIG_KEY,JSON.stringify({url:val("#sb-url").replace(/\/$/,""),key:val("#sb-key")}));state.demo=false;localStorage.removeItem(DEMO_KEY);closeModal();await boot()})
-}
-function loadDemo(){
-  state.org={id:"demo-org",name:"Barton Town Cricket Club",slug:"barton-town-cricket-club"};
-  state.garage={id:"demo-garage",name:"Main Garage",location_name:"Club Grounds"};
-  if(!state.machines.length)state.machines=[{id:"demo-lf3800",garage_id:"demo-garage",machine_variant_id:demoCatalogue[0].variant_id,serial_number:"DEMO-LF3800",asset_number:"BTCC-001",nickname:"Main Outfield Mower",purchase_date:"2025-03-14",current_engine_hours:1284.5,current_reel_hours:642.2,status:"ready",variant:{variant_name:"LF3800 5-Gang"},model:{model_name:"LF3800"},manufacturer:{name:"Jacobsen"}}]
-}
-document.addEventListener("click",e=>{
-  const a=e.target.closest("[data-action]");if(!a)return;
-  const x=a.dataset.action;
-  if(["today","garage","catalogue","activity","profile"].includes(x))return setView(x);
-  if(x==="quick-add")return setView("catalogue");
-  if(x==="quick-hours")return machinePicker("hours");
-  if(x==="quick-service")return machinePicker("service");
-  if(x==="quick-fault")return machinePicker("fault");
-  if(x==="mow"){return machinePicker("mow")}
-  if(x==="mow-pause")return pauseMow();
-  if(x==="mow-stop")return finishMow();
-  if(x==="exit-mow")return exitMow();
-  if(x==="quick-machine"){
-    state.selected=state.machines.find(v=>v.id===a.dataset.id)||null;
-    const action=state.quickAction;state.quickAction=null;closeModal();
-    if(action==="hours")return hoursModal();if(action==="service")return serviceModal();if(action==="fault")return faultModal();if(action==="mow")return startMow(state.selected.id);
-    return;
-  }
-  if(x==="quick-machine"){
-    state.selected=state.machines.find(v=>v.id===a.dataset.id)||null;
-    const action=state.quickAction;state.quickAction=null;closeModal();
-    if(action==="hours")return hoursModal();if(action==="service")return serviceModal();return faultModal();
-  }
-  if(x==="resolve-fault")return resolveFaultModal(a.dataset.id);
-  if(x==="ack-fault")return acknowledgeFault(a.dataset.id);
-  if(x==="status")return statusTransitionModal();
-  if(x==="set-status")return setMachineStatus(a.dataset.status);
-  if(x==="connection")return connectionModal();
-  if(x==="demo"){state.demo=true;localStorage.setItem(DEMO_KEY,"true");loadDemo();closeModal();return render()}
-  if(x==="close")return closeModal();
-  if(x==="add"){state.catalogueResults=[];return addModal()}
-  if(x==="select"){const r=state.catalogueResults.find(v=>v.variant_id===a.dataset.id);if(r)machineModal(r);return}
-  if(x==="open"){state.selected=state.machines.find(v=>v.id===a.dataset.id)||null;state.specs=[];return render()}
-  if(x==="back"||x==="home")return setView("garage");
-  if(x==="edit")return editModal();
-  if(x==="hours")return hoursModal();
-  if(x==="document-upload")return evidenceUploadModal("document");
-  if(x==="photo-upload")return evidenceUploadModal("photo");
-  if(x==="open-document")return openDocument(e.target.closest("[data-id]")?.dataset.id);
-  if(x==="open-service-evidence")return openServiceEvidence(e.target.closest("[data-id]")?.dataset.id);
-  if(x==="service-task")return serviceTaskModal(a.dataset.id);
-  if(x==="service")return serviceModal();
-  if(x==="unknown-machine")return unknownMachineModal();
-  if(x==="search-identified"){const query=a.dataset.query||"";closeModal();addModal();const q=document.querySelector("#q");if(q){q.value=query;search(query);q.focus()}return}
-  if(x==="signup")return signUp();
-});
-boot();
-
-window.addEventListener("online",()=>{state.offline=false;syncOutbox()});
-window.addEventListener("offline",()=>{state.offline=true;render()});
-setInterval(()=>{if(navigator.onLine)syncOutbox()},15000);
