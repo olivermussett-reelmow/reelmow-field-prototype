@@ -1,4 +1,4 @@
-name: Deploy REELMOW Test Build
+name: Deploy REELMOW
 
 on:
   push:
@@ -50,8 +50,8 @@ jobs:
           const js = 'window.REELMOW_CONFIG = ' + JSON.stringify({ url, key }) + ';\\n';
           fs.writeFileSync('reelmow.config.js', js, 'utf8');
           NODE
-          test -n "$url"
-          test -n "$key"
+          test -n "$SUPABASE_URL"
+          test -n "$SUPABASE_PUBLISHABLE_KEY"
           test -s reelmow.config.js
           node - <<'NODE'
           const fs = require('fs');
