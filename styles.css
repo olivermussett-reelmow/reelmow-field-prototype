@@ -325,3 +325,19 @@ h3{font-weight:760}
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{scroll-behavior:auto!important;transition-duration:.01ms!important;animation-duration:.01ms!important;animation-iteration-count:1!important}
 }
+
+
+/* UX 1.0 interaction details */
+.machine-svg,.quick-icon svg{width:24px;height:24px;display:block}
+.machine-svg{width:64px;height:48px}
+.quick-action.quick-mow{grid-column:span 2;min-height:116px}
+.quick-action.quick-mow .quick-icon{width:40px;height:40px}
+.status-dot.status-attention{background:#c98a1b;box-shadow:0 0 0 6px rgba(201,138,27,.12)}
+.calm-mark{font-size:16px}
+.today-machine-strip .machine-card{min-width:0}
+@media(max-width:800px){
+  .quick-action.quick-mow{grid-column:span 2}
+}
+@media(max-width:600px){
+  .quick-action.quick-mow{grid-column:span 2;min-height:112px}
+}
