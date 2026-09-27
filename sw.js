@@ -1,4 +1,4 @@
-const VERSION="20260927-9";
+const VERSION="20260927-10";
 const CACHE="reelmow-shell-"+VERSION;
 const ASSETS=["./","./index.html","./styles.css","./app.js","./manifest.webmanifest","./icon.svg"];
 
