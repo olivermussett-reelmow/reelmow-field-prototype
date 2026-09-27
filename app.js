@@ -241,59 +241,45 @@ function card(m){
   return "<article class='card machine-card' data-action='open' data-id='"+esc(m.id)+"' tabindex='0' role='button' aria-label='Open "+esc(m.nickname||n)+"'><div class='machine-visual'><div class='glyph'>"+machineIcon()+"</div></div><div class='machine-name'>"+esc(m.nickname||n)+"</div><div class='machine-sub'>"+esc(m.manufacturer?.name||"Manufacturer")+" · "+esc(v)+"</div><div class='machine-meta'><span class='badge "+statusClass(m.status)+"'>"+esc(status)+"</span><span class='tiny'>"+(m.current_engine_hours!=null?esc(m.current_engine_hours)+" h":"No hours")+"</span></div></article>"
 }
 function renderToday(){
-  const serviceItems=(state.dashboardDue||[]).filter(x=>x.service_status==="due"||x.service_status==="upcoming"||x.service_status==="history_unknown");
-  const urgent=serviceItems.filter(x=>x.service_status==="due");
-  const historyUnknown=serviceItems.filter(x=>x.service_status==="history_unknown");
+  const due=(state.dashboardDue||[]).filter(x=>x.service_status==="due");
+  const unknown=(state.dashboardDue||[]).filter(x=>x.service_status==="history_unknown");
   const faults=(state.openFaults||[]).filter(x=>x.status!=="resolved");
-  const machineCount=state.machines.length;
   const outOfService=state.machines.filter(m=>m.status==="out_of_service").length;
-  const totalHours=state.machines.reduce((sum,m)=>sum+(Number(m.current_engine_hours)||0),0);
-
-  const attentionRows=[
-    ...urgent.slice(0,3).map(x=>{
-      const m=state.machines.find(v=>v.id===x.machine_id);
-      return "<button class='today-task' data-action='open' data-id='"+esc(x.machine_id)+"'><span><strong>"+esc(m?.nickname||m?.model?.model_name||"Machine")+"</strong><small>"+esc(x.task_name||"Service task")+(x.hours_remaining!=null?" · "+esc(x.hours_remaining)+" h remaining":"")+"</small></span><span class='badge service'>DUE</span></button>";
-    }),
-    ...faults.slice(0,3).map(x=>{
-      const m=state.machines.find(v=>v.id===x.machine_id);
-      return "<button class='today-task fault-task' data-action='open' data-id='"+esc(x.machine_id)+"'><span><strong>"+esc(m?.nickname||m?.model?.model_name||"Machine")+"</strong><small>"+esc(x.description)+"</small></span><span class='badge fault'>"+esc(x.severity.toUpperCase())+"</span></button>";
-    }),
-    ...historyUnknown.slice(0,2).map(x=>{
-      const m=state.machines.find(v=>v.id===x.machine_id);
-      return "<button class='today-task history-task' data-action='open' data-id='"+esc(x.machine_id)+"'><span><strong>"+esc(m?.nickname||m?.model?.model_name||"Machine")+"</strong><small>"+esc(x.task_name||"Service task")+" · Service history not recorded</small></span><span class='badge history'>UNKNOWN</span></button>";
-    })
-  ].slice(0,5).join("");
-
-  const attentionBlock=attentionRows
-    ? "<section class='today-section'><div class='section-head'><div><div class='eyebrow'>Needs attention</div><h2>Deal with these first.</h2></div></div><div class='today-tasks'>"+attentionRows+"</div></section>"
-    : "<section class='today-section'><div class='calm-card card'><div class='calm-mark'>✓</div><div><strong>Nothing needs your attention.</strong><div class='tiny'>No service or machine problems currently require action.</div></div></div></section>";
-
-  const fleetLabel=outOfService?"Availability needs attention":"All machines available";
-  const fleetMeta=outOfService
-    ? outOfService+" machine"+(outOfService===1?" is":"s are")+" out of service"
-    : machineCount+" machine"+(machineCount===1?"":"s")+" · "+(totalHours?Math.round(totalHours)+" recorded hours":"No hours recorded");
-
+  const actionable=[
+    ...due.slice(0,3).map(x=>({kind:"service",machineId:x.machine_id,title:x.task_name||"Service task",detail:x.hours_remaining!=null?Math.round(Number(x.hours_remaining)*10)/10+" h remaining":"Service due"})),
+    ...faults.slice(0,3).map(x=>({kind:"fault",machineId:x.machine_id,title:"Problem reported",detail:x.description||"Machine issue"})),
+    ...unknown.slice(0,2).map(x=>({kind:"history",machineId:x.machine_id,title:x.task_name||"Service history",detail:"History not recorded"}))
+  ].slice(0,4);
+  const attention=actionable.length
+    ? "<div class='today-attention-list'>"+actionable.map(x=>{
+        const m=state.machines.find(v=>v.id===x.machineId);
+        const badge=x.kind==="service"?"DUE":x.kind==="fault"?"FAULT":"HISTORY";
+        return "<button class='today-attention-row' data-action='open' data-id='"+esc(x.machineId)+"'><span class='attention-main'><strong>"+esc(m?.nickname||m?.model?.model_name||"Machine")+"</strong><small>"+esc(x.title)+" · "+esc(x.detail)+"</small></span><span class='badge "+(x.kind==="fault"?"fault":x.kind==="history"?"history":"service")+"'>"+badge+"</span><span class='row-arrow'>›</span></button>";
+      }).join("")+"</div>"
+    : "<div class='today-clear'><span>✓</span><div><strong>All clear</strong><small>No immediate service or machine problems.</small></div></div>";
+  const fleetStatus=outOfService
+    ? "<span class='status-dot status-attention'></span><div><strong>"+outOfService+" machine"+(outOfService===1?"":"s")+" unavailable</strong><small>Check Garage</small></div>"
+    : "<span class='status-dot'></span><div><strong>Fleet ready</strong><small>"+state.machines.length+" machine"+(state.machines.length===1?"":"s")+" available</small></div>";
   mount(
-    "<section class='today-hero'>"+
-      "<div><div class='eyebrow'>Today · "+esc(state.garage?.name||"Garage")+"</div><h1>Ready for the day.</h1><p class='lede' style='color:#d2e1d8'>Your machines, today's work and anything that needs attention.</p></div>"+
-      "<div class='today-status'><span class='status-dot "+(outOfService?"status-attention":"")+"'></span><div><strong>"+fleetLabel+"</strong><small>"+fleetMeta+"</small></div></div>"+
-    "</section>"+
-    quickActions()+
-    attentionBlock+
-    "<section class='today-section'><div class='section-head'><div><div class='eyebrow'>Fleet</div><h2>Your machines.</h2></div><button class='btn secondary small' data-action='garage'>View Garage</button></div><div class='today-machine-strip'>"+
-      (state.machines.length?state.machines.slice(0,4).map(card).join(""):"<div class='card empty'><h2>Start with your first machine.</h2><p class='lede'>Add the first physical asset to your Garage.</p><button class='btn' data-action='quick-add'>Add machine</button></div>")+
-    "</div></section>"
+    "<section class='today-compact'>"+
+      "<div class='today-heading'><div><div class='eyebrow'>Today · "+esc(state.garage?.name||"Garage")+"</div><h1>Good to go.</h1></div><div class='today-fleet-status'>"+fleetStatus+"</div></div>"+
+      "<button class='start-mow-bar' data-action='mow'><span class='start-mow-icon'>"+actionIcon("mow")+"</span><span><strong>Start mowing</strong><small>Choose a machine and begin tracking</small></span><span class='row-arrow'>›</span></button>"+
+      "<div class='quick-strip'>"+
+        "<button data-action='quick-hours'><span>"+actionIcon("hours")+"</span><strong>Hours</strong></button>"+
+        "<button data-action='quick-service'><span>"+actionIcon("service")+"</span><strong>Service</strong></button>"+
+        "<button data-action='quick-fault'><span>"+actionIcon("fault")+"</span><strong>Problem</strong></button>"+
+      "</div>"+
+      "<section class='today-block'><div class='today-block-head'><div><div class='eyebrow'>Needs attention</div><h2>"+(actionable.length?"Deal with these first":"Nothing urgent")+"</h2></div>"+(actionable.length?"<span class='count-pill'>"+actionable.length+"</span>":"")+"</div>"+attention+"</section>"+
+      "<section class='today-block'><div class='today-block-head'><div><div class='eyebrow'>Fleet</div><h2>Your machines</h2></div><button class='text-button' data-action='garage'>View all</button></div>"+
+        "<div class='today-fleet-list'>"+(state.machines.length?state.machines.slice(0,3).map(m=>{
+          const status=statusLabel(m.status);
+          return "<button class='today-machine-row' data-action='open' data-id='"+esc(m.id)+"'><span class='machine-row-icon'>"+machineIcon()+"</span><span class='machine-row-copy'><strong>"+esc(m.nickname||m.model?.model_name||"Machine")+"</strong><small>"+esc(m.manufacturer?.name||"")+" · "+esc(m.variant?.variant_name||"")+"</small></span><span class='machine-row-status'><i class='mini-status "+(m.status==="out_of_service"?"attention":"")+"'></i>"+esc(status)+"</span><span class='row-arrow'>›</span></button>";
+        }).join(""):"<div class='today-clear'><span>+</span><div><strong>Add your first machine</strong><small>Build your Garage from the catalogue.</small></div></div>")+"</div>"+
+      "</section>"+
+    "</section>"
   );
 }
-function quickActions(){
-  return "<section class='quick-actions'>"+
-    "<button class='quick-action quick-mow' data-action='mow'><span class='quick-icon'>"+actionIcon("mow")+"</span><strong>Start mowing</strong><small>Choose a machine and begin tracking</small></button>"+
-    "<button class='quick-action' data-action='quick-hours'><span class='quick-icon'>"+actionIcon("hours")+"</span><strong>Log hours</strong><small>Update a machine meter</small></button>"+
-    "<button class='quick-action' data-action='quick-service'><span class='quick-icon'>"+actionIcon("service")+"</span><strong>Record service</strong><small>Log completed maintenance</small></button>"+
-    "<button class='quick-action' data-action='quick-fault'><span class='quick-icon'>"+actionIcon("fault")+"</span><strong>Report problem</strong><small>Capture a machine issue</small></button>"+
-  "</section>";
-}
-
+function quickActions(){ return ""; }
 function haversineM(a,b){
   if(!a||!b)return 0;
   const R=6371000,rad=Math.PI/180,dLat=(b.latitude-a.latitude)*rad,dLon=(b.longitude-a.longitude)*rad;
@@ -428,8 +414,28 @@ function renderGarage(){
 function renderDetail(){
   const m=state.selected;
   const pending=readOutbox().filter(x=>x.payload?.machineId===m.id).length;
-  mount("<div class='breadcrumb'><button class='back' data-action='back'>← Garage</button><span>/</span><span>Machine profile</span></div><section class='detail-head'><div class='machine-title'><div class='machine-title-icon'>⚙︎</div><div><div class='eyebrow'>"+esc(m.manufacturer?.name||"Manufacturer")+"</div><h1 style='font-size:38px;margin-bottom:5px'>"+esc(m.nickname||m.model?.model_name||"Machine")+"</h1><p class='muted'>"+esc(m.variant?.variant_name||"Variant")+"</p></div></div><div class='actions'><button class='badge "+statusClass(m.status)+"' data-action='status'>"+esc(statusLabel(m.status))+" · Change</button></div></section><div class='detail-grid'><div><div class='card'><div class='section-head' style='margin:0 0 12px'><div><div class='eyebrow'>Machine health</div><h2>At a glance</h2></div><button class='btn secondary small' data-action='edit'>Edit</button></div><div class='metric-row'><div class='metric'><div class='num'>"+(m.current_engine_hours??"—")+"</div><div class='label'>Engine hours</div></div><div class='metric'><div class='num'>"+(m.current_reel_hours??"—")+"</div><div class='label'>Reel hours</div></div></div><div class='actions' style='margin-top:14px'><button class='btn small' data-action='hours'>Update hours</button><button class='btn secondary small' data-action='service'>Record service</button></div><div class='list'><div class='list-row'><div><div class='list-title'>Serial number</div><div class='list-meta'>"+esc(m.serial_number||"Not recorded")+"</div></div></div><div class='list-row'><div><div class='list-title'>Asset number</div><div class='list-meta'>"+esc(m.asset_number||"Not recorded")+"</div></div></div><div class='list-row'><div><div class='list-title'>Purchase date</div><div class='list-meta'>"+esc(m.purchase_date||"Not recorded")+"</div></div></div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Service status</div><h2>What needs doing?</h2><div id='service-due'><div class='loading'><div class='spinner'></div>Checking service schedule…</div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Catalogue specifications</div><h2>Known machine data</h2><div id='specs'><div class='loading'><div class='spinner'></div>Loading verified specifications…</div></div></div></div><div><div class='card'><div class='eyebrow'>Service history</div><h2>Recent work</h2><div id='service-history'><div class='loading'><div class='spinner'></div>Loading service history…</div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Faults & repairs</div><h2>Problems and resolution</h2><div class='actions' style='margin:10px 0'><button class='btn secondary small' data-action='fault'>Report problem</button></div><div id='machine-faults'><div class='loading'><div class='spinner'></div>Loading fault history…</div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Documents</div><h2>Machine knowledge</h2><div class='actions' style='margin:10px 0'><button class='btn secondary small' data-action='document-upload'>Add document</button></div><div id='machine-documents'><div class='loading'><div class='spinner'></div>Loading documents…</div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Photos</div><h2>Machine evidence</h2><div class='actions' style='margin:10px 0'><button class='btn secondary small' data-action='photo-upload'>Take / add photo</button></div><div id='machine-photos'><div class='loading'><div class='spinner'></div>Loading photos…</div></div></div></div></div>"+(pending?"<div class='note' style='margin:0 0 15px'><b>"+pending+" change"+(pending===1?"":"s")+" saved on this device.</b> It will sync automatically when online.</div>":""));
-  loadSpecs(m);loadServiceData(m);loadEvidence(m);loadMachineFaults(m)
+  mount("<div class='machine-page'>"+
+    "<div class='machine-back'><button class='back' data-action='back'>← Garage</button></div>"+
+    "<section class='machine-hero-compact'>"+
+      "<div class='machine-identity'><div class='machine-hero-icon'>"+machineIcon()+"</div><div><div class='eyebrow'>"+esc(m.manufacturer?.name||"Manufacturer")+" · "+esc(m.variant?.variant_name||"Variant")+"</div><h1>"+esc(m.nickname||m.model?.model_name||"Machine")+"</h1><div class='machine-status-line'><span class='mini-status "+(m.status==="out_of_service"?"attention":"") +"'></span>"+esc(statusLabel(m.status))+"<button class='status-change' data-action='status'>Change</button></div></div></div>"+
+      "<div class='machine-primary-actions'><button class='btn' data-action='mow'>Mow</button><button class='btn secondary' data-action='hours'>Hours</button><button class='btn secondary' data-action='service'>Service</button><button class='btn secondary' data-action='fault'>Problem</button></div>"+
+    "</section>"+
+    (pending?"<div class='note compact-note'><b>"+pending+" saved change"+(pending===1?"":"s")+" pending sync.</b></div>":"")+
+    "<section class='machine-glance'>"+
+      "<div class='glance-metric'><strong>"+(m.current_engine_hours??"—")+"</strong><small>Engine hours</small></div>"+
+      "<div class='glance-metric'><strong>"+(m.current_reel_hours??"—")+"</strong><small>Reel hours</small></div>"+
+      "<div class='glance-metric'><strong id='machine-due-count'>—</strong><small>Maintenance</small></div>"+
+    "</section>"+
+    "<section class='machine-next'><div class='eyebrow'>Next</div><div id='service-due'><div class='loading'><div class='spinner'></div>Checking service schedule…</div></div></section>"+
+    "<div class='machine-disclosures'>"+
+      "<details open><summary><span>Problems</span><span class='disclosure-meta'>Active issues & repairs</span></summary><div class='disclosure-body'><div class='actions disclosure-action'><button class='btn secondary small' data-action='fault'>Report problem</button></div><div id='machine-faults'><div class='loading'><div class='spinner'></div>Loading fault history…</div></div></div></details>"+
+      "<details><summary><span>Service history</span><span class='disclosure-meta'>Completed maintenance</span></summary><div class='disclosure-body'><div id='service-history'><div class='loading'><div class='spinner'></div>Loading service history…</div></div></div></details>"+
+      "<details><summary><span>Machine details</span><span class='disclosure-meta'>Identity & ownership</span></summary><div class='disclosure-body'><div class='detail-facts'><div><small>Serial number</small><strong>"+esc(m.serial_number||"Not recorded")+"</strong></div><div><small>Asset number</small><strong>"+esc(m.asset_number||"Not recorded")+"</strong></div><div><small>Purchase date</small><strong>"+esc(m.purchase_date||"Not recorded")+"</strong></div></div><button class='btn secondary small' data-action='edit'>Edit machine</button></div></details>"+
+      "<details><summary><span>Specifications</span><span class='disclosure-meta'>Verified catalogue data</span></summary><div class='disclosure-body'><div id='specs'><div class='loading'><div class='spinner'></div>Loading verified specifications…</div></div></div></details>"+
+      "<details><summary><span>Evidence</span><span class='disclosure-meta'>Photos & documents</span></summary><div class='disclosure-body'><div class='evidence-actions'><button class='btn secondary small' data-action='photo-upload'>Add photo</button><button class='btn secondary small' data-action='document-upload'>Add document</button></div><div class='evidence-sub'><div class='eyebrow'>Photos</div><div id='machine-photos'><div class='loading'><div class='spinner'></div>Loading photos…</div></div></div><div class='evidence-sub'><div class='eyebrow'>Documents</div><div id='machine-documents'><div class='loading'><div class='spinner'></div>Loading documents…</div></div></div></div></details>"+
+    "</div>"+
+  "</div>");
+  loadSpecs(m);loadServiceData(m);loadEvidence(m);loadMachineFaults(m);
 }
 function canOperate(){return state.demo||["owner","admin","manager","operator"].includes(state.role)}
 function canEditMachine(){return canOperate()}
