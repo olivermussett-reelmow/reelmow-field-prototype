@@ -443,12 +443,14 @@ function resolveFaultModal(id){
 }
 function statusTransitionModal(){
   const m=state.selected;if(!m)return;
-  const transitions={ready:["service_due","in_service","out_of_service"],service_due:["in_service","ready","out_of_service"],in_service:["ready","service_due","out_of_service"],out_of_service:["in_service","repaired","retired"],repaired:["ready","out_of_service"],retired:[]}[m.status]||[];
+  let transitions={ready:["service_due","in_service","out_of_service"],service_due:["in_service","ready","out_of_service"],in_service:["ready","service_due","out_of_service"],out_of_service:["in_service","repaired","retired"],repaired:["ready","out_of_service"],retired:[]}[m.status]||[];
+  if(!["owner","admin"].includes(state.role))transitions=transitions.filter(x=>x!=="retired");
   if(!transitions.length)return toast("No manual status transitions are available.");
-  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Machine status</div><h2>Change operational state.</h2><p class='tiny'>Current status: "+esc(statusLabel(m.status))+". Choose the next valid state.</p></div><button class='close' data-action='close'>×</button></div><div class='picker-list'>"+transitions.map(x=>"<button class='picker-row' data-action='set-status' data-status='"+esc(x)+"'><span><strong>"+esc(statusLabel(x))+"</strong><small>"+esc(x==="in_service"?"Machine is being worked on":x==="out_of_service"?"Machine is unavailable":x==="repaired"?"Repair completed; awaiting return to service":x==="retired"?"Remove from active fleet":"Operational state")+"</small></span><span>›</span></button>").join("")+"</div></div></div>");
+  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Machine status</div><h2>Change operational state.</h2><p class='tiny'>Current status: "+esc(statusLabel(m.status))+". Choose the next valid state.</p></div><button class='close' data-action='close'>×</button></div><div class='picker-list'>"+transitions.map(x=>"<button class='picker-row' data-action='set-status' data-status='"+esc(x)+"'><span><strong>"+esc(statusLabel(x))+"</strong><small>"+esc(x==="in_service"?"Machine is being worked on":x==="out_of_service"?"Machine is unavailable":x==="repaired"?"Repair completed; awaiting return to service":x==="retired"?"Remove from active fleet — permanent":"Operational state")+"</small></span><span>›</span></button>").join("")+"</div></div></div>");
 }
 async function setMachineStatus(status){
   const m=state.selected;if(!m)return;
+  if(status==="retired"&&!confirm("Retire this machine? This removes it from the active fleet and cannot be reversed from the app."))return;
   if(state.demo){m.status=status;closeModal();toast("Status changed");return renderDetail()}
   try{
     const {data,error}=await state.client.schema("garage").rpc("transition_machine_status",{p_machine_id:m.id,p_target_status:status,p_notes:"Status changed in Garage"});
