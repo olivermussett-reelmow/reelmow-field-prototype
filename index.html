@@ -10,7 +10,7 @@
 <title>REELMOW Garage</title>
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" href="./icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="./styles.css?v=ux1-1">
+<link rel="stylesheet" href="./styles.css?v=ux2-1">
 <style>
 #app{min-height:100vh}
 .startup{min-height:100vh;display:grid;place-items:center;padding:32px;font-family:system-ui,-apple-system,sans-serif;color:#18352a}
@@ -41,12 +41,12 @@ window.addEventListener("unhandledrejection",function(e){
   if(box){box.style.display="block";box.textContent="REELMOW could not start.\n"+(e.reason?.message||e.reason||"Startup error");}
 });
 </script>
-<script src="./reelmow.config.js?v=20260927-5"></script>
+<script src="./reelmow.config.js?v=20260927-14"></script>
 <script>
 if("serviceWorker" in navigator){
   window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(()=>{}));
 }
 </script>
-<script type="module" src="./app.js?v=ux1-1"></script>
+<script type="module" src="./app.js?v=ux2-1"></script>
 </body>
 </html>
