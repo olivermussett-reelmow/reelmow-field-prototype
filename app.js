@@ -233,6 +233,7 @@ function renderToday(){
   const historyUnknown=serviceItems.filter(x=>x.service_status==="history_unknown");
   const faults=(state.openFaults||[]).filter(x=>x.status!=="resolved");
   const machineCount=state.machines.length;
+  const outOfService=state.machines.filter(m=>m.status==="out_of_service").length;
   const totalHours=state.machines.reduce((sum,m)=>sum+(Number(m.current_engine_hours)||0),0);
   const attention=urgent.slice(0,4).map(x=>{
     const m=state.machines.find(v=>v.id===x.machine_id);
@@ -251,7 +252,9 @@ function renderToday(){
   const attentionBlock=combinedAttention
     ? "<section class='today-section'><div class='section-head'><div><div class='eyebrow'>Needs attention</div><h2>What matters now?</h2></div></div><div class='today-tasks'>"+combinedAttention+"</div></section>"
     : "<section class='today-section'><div class='calm-card card'><div class='calm-mark'>✓</div><div><strong>You're up to date.</strong><div class='tiny'>No service tasks or reported faults currently require action.</div></div></div></section>";
-  mount("<section class='today-hero'><div><div class='eyebrow'>"+esc(state.demo?"Demo workspace":state.org?.name||"Your workspace")+"</div><h1>Good morning.<br>Let's get to work.</h1><p class='lede' style='color:#d2e1d8'>The important things are here. Everything else can stay out of the way.</p></div><div class='today-status'><span class='status-dot'></span><div><strong>Fleet operational</strong><small>"+machineCount+" machine"+(machineCount===1?"":"s")+" · "+(totalHours?Math.round(totalHours)+" recorded hours":"No hours recorded")+"</small></div></div></section>"+quickActions()+attentionBlock+"<section class='today-section'><div class='section-head'><div><div class='eyebrow'>Your Garage</div><h2>Machinery at a glance</h2></div><button class='btn secondary small' data-action='garage'>View Garage</button></div><div class='today-machine-strip'>"+(state.machines.length?state.machines.slice(0,4).map(card).join(""):"<div class='card empty'><h2>Start with your first machine.</h2><p class='lede'>Build the operational memory of your Garage.</p><button class='btn' data-action='quick-add'>Add machine</button></div>")+"</div></section>");
+  const fleetLabel=outOfService?"Fleet needs attention":"Fleet operational";
+  const fleetMeta=outOfService?(outOfService+" machine"+(outOfService===1?" is":"s are")+" out of service · "+(totalHours?Math.round(totalHours)+" recorded hours":"No hours recorded")):(machineCount+" machine"+(machineCount===1?"":"s")+" · "+(totalHours?Math.round(totalHours)+" recorded hours":"No hours recorded"));
+  mount("<section class='today-hero'><div><div class='eyebrow'>"+esc(state.demo?"Demo workspace":state.org?.name||"Your workspace")+"</div><h1>Good morning.<br>Let's get to work.</h1><p class='lede' style='color:#d2e1d8'>The important things are here. Everything else can stay out of the way.</p></div><div class='today-status'><span class='status-dot'></span><div><strong>"+fleetLabel+"</strong><small>"+fleetMeta+"</small></div></div></section>"+quickActions()+attentionBlock+"<section class='today-section'><div class='section-head'><div><div class='eyebrow'>Your Garage</div><h2>Machinery at a glance</h2></div><button class='btn secondary small' data-action='garage'>View Garage</button></div><div class='today-machine-strip'>"+(state.machines.length?state.machines.slice(0,4).map(card).join(""):"<div class='card empty'><h2>Start with your first machine.</h2><p class='lede'>Build the operational memory of your Garage.</p><button class='btn' data-action='quick-add'>Add machine</button></div>")+"</div></section>");
 }
 function quickActions(){
   return "<div class='quick-actions'><button class='quick-action quick-mow' data-action='mow'><span class='quick-icon'>▰</span><strong>Start Mow Mode</strong><small>GPS track + speed</small></button><button class='quick-action' data-action='quick-add'><span class='quick-icon'>＋</span><strong>Add machine</strong><small>Catalogue + plate</small></button><button class='quick-action' data-action='quick-hours'><span class='quick-icon'>◷</span><strong>Update hours</strong><small>Fast field entry</small></button><button class='quick-action' data-action='quick-service'><span class='quick-icon'>✓</span><strong>Record service</strong><small>Complete a task</small></button><button class='quick-action' data-action='quick-fault'><span class='quick-icon'>!</span><strong>Report problem</strong><small>Capture an issue</small></button></div>";
@@ -352,6 +355,7 @@ function renderGarage(){
   const attention=due.filter(x=>x.service_status==="due").length;
   const upcoming=due.filter(x=>x.service_status==="upcoming").length;
   const historyUnknown=due.filter(x=>x.service_status==="history_unknown").length;
+  const outOfService=list.filter(m=>m.status==="out_of_service").length;
   const totalHours=list.reduce((sum,m)=>sum+(Number(m.current_engine_hours)||0),0);
   const attentionRows=due.filter(x=>x.service_status==="due").slice(0,5).map(x=>{
     const m=list.find(v=>v.id===x.machine_id);
@@ -359,7 +363,7 @@ function renderGarage(){
   }).join("");
   const operations=attention
     ? `<div class="attention-list">${attentionRows}</div>`
-    : `<div class="card calm-card"><div class="calm-mark">✓</div><div><strong>No service is currently due.</strong><div class="tiny">No published service tasks require immediate action.${historyUnknown?` ${historyUnknown} ${historyUnknown===1?"task has":"tasks have"} no recorded service history.`:""}</div></div></div>`;
+    : `<div class="card calm-card"><div class="calm-mark">${outOfService?"!":"✓"}</div><div><strong>No service is currently due.${outOfService?" Machine availability needs attention.":""}</strong><div class="tiny">No published service tasks require immediate action.${historyUnknown?` ${historyUnknown} ${historyUnknown===1?"task has":"tasks have"} no recorded service history.`:""}${outOfService?` ${outOfService} ${outOfService===1?"machine is":"machines are"} currently out of service.`:""}</div></div></div>`;
   const fleet=list.length
     ? `<div class="grid">${list.map(card).join("")}</div>`
     : `<div class="card empty"><div class="empty-icon">⚙︎</div><h2>Your Garage is empty.</h2><p class="lede" style="margin:0 auto 18px">Start by adding a machine from the REELMOW catalogue.</p><button class="btn" data-action="add">Add your first machine</button></div>`;
@@ -672,6 +676,7 @@ function unknownMachineModal(){
 async function startMow(machineId){
   if(!navigator.geolocation)return toast("Location is not available on this device.");
   const m=state.machines.find(x=>x.id===machineId);if(!m)return;
+  if(m.status!=="ready"&&m.status!=="in_service")return toast("Mow Mode is unavailable while this machine is "+statusLabel(m.status)+".");
   state.mow={active:true,paused:false,sessionId:null,machineId,watchId:null,startedAt:new Date().toISOString(),lastPoint:null,trackPoints:[],distanceM:0,points:0,accuracyM:null,speedMps:null,headingDeg:null,pattern:"stripe",targetSpeedKph:null};
   renderMowScreen();
   if(state.demo){state.mow.sessionId="demo-"+crypto.randomUUID();startMowGps();return}
