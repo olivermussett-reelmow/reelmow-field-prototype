@@ -587,17 +587,21 @@ async function openDocument(id){
   window.open(data.signedUrl,"_blank","noopener,noreferrer")
 }
 function serviceDueHtml(){
-  if(!state.serviceDue.length)return "<div class='empty-mini'><div class='tiny'>No published service schedule for this machine yet.</div><div class='tiny' style='margin-top:5px'>REELMOW only shows maintenance rules that have been sourced and validated.</div></div>";
-  return "<div class='list'>"+state.serviceDue.map(x=>{
-    const due=x.service_status==="due";
-    const unknown=x.service_status==="history_unknown";
+  if(!state.serviceDue.length)return "<div class='next-empty'>No published service schedule.</div>";
+  const ordered=[...state.serviceDue].sort((a,b)=>{
+    const rank=x=>x.service_status==="due"?0:x.service_status==="history_unknown"?1:2;
+    return rank(a)-rank(b);
+  });
+  const visible=ordered.slice(0,3);
+  return "<div class='next-list'>"+visible.map(x=>{
+    const due=x.service_status==="due",unknown=x.service_status==="history_unknown";
     const remaining=x.hours_remaining!=null?Math.round(Number(x.hours_remaining)*10)/10:null;
     const date=x.calendar_due_date;
-    const detail=unknown?"Service history not recorded":remaining!=null?(remaining<=0?"Due now":remaining+" engine hours remaining"):(date?("Due "+date):"Schedule published");
+    const detail=unknown?"History not recorded":remaining!=null?(remaining<=0?"Due now":remaining+" engine hours remaining"):(date?"Due "+date:"Schedule published");
     const badgeClass=due?"service":unknown?"history":"ready";
-    const badgeLabel=due?"DUE":unknown?"HISTORY NOT RECORDED":"UPCOMING";
-    return "<button class='list-row service-task-row' data-action='service-task' data-id='"+esc(x.service_task_id||"")+"' style='width:100%;text-align:left;background:none;border:0;cursor:pointer'><div><div class='list-title'>"+esc(x.task_name)+"</div><div class='list-meta'>"+esc(detail)+(date&&!unknown&&remaining!=null?" · "+esc(date):"")+(x.source_page?" · Manual p."+esc(x.source_page):"")+"</div></div><span class='badge "+badgeClass+"'>"+badgeLabel+"</span></button>"
-  }).join("")+"</div>"
+    const badgeLabel=due?"DUE":unknown?"HISTORY UNKNOWN":"UPCOMING";
+    return "<button class='next-row' data-action='service-task' data-id='"+esc(x.service_task_id||"")+"'><span><strong>"+esc(x.task_name)+"</strong><small>"+esc(detail)+"</small></span><span class='badge "+badgeClass+"'>"+badgeLabel+"</span><span class='row-arrow'>›</span></button>";
+  }).join("")+"</div>"+(ordered.length>3?"<div class='next-more'>"+(ordered.length-3)+" more maintenance item"+(ordered.length-3===1?"":"s")+" in Service history.</div>":"");
 }
 function serviceTaskModal(taskId){
   const x=state.serviceDue.find(v=>v.service_task_id===taskId);
@@ -639,6 +643,7 @@ async function loadServiceData(m){
   }
   const dueBox=document.querySelector("#service-due");if(dueBox)dueBox.innerHTML=serviceDueHtml();
   const hist=document.querySelector("#service-history");if(hist)hist.innerHTML=serviceHistoryHtml();
+  const dueCount=document.querySelector("#machine-due-count");if(dueCount){const active=state.serviceDue.filter(x=>x.service_status==="due").length;const unknown=state.serviceDue.filter(x=>x.service_status==="history_unknown").length;dueCount.textContent=active?active+" due":unknown?unknown+" unknown":"Up to date";}
 }
 function hoursModal(){
   const m=state.selected;
