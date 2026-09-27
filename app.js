@@ -701,13 +701,16 @@ function pauseMow(){
   state.mow.paused=!state.mow.paused;
   renderMowScreen();
 }
-function exitMow(){
+async function exitMow(){
   if(!state.mow.active)return setView("today");
-  if(confirm("Exit Mow Mode? The active session will be cancelled.")){
-    if(state.mow.watchId!=null)navigator.geolocation.clearWatch(state.mow.watchId);
-    if(!state.demo&&state.mow.sessionId)state.client.schema("garage").from("mowing_sessions").update({ended_at:new Date().toISOString(),status:"cancelled"}).eq("id",state.mow.sessionId);
-    state.mow.active=false;setView("today");
+  if(!confirm("Exit Mow Mode? The active session will be cancelled."))return;
+  if(state.mow.watchId!=null)navigator.geolocation.clearWatch(state.mow.watchId);
+  if(!state.demo&&state.mow.sessionId){
+    const {error}=await state.client.schema("garage").from("mowing_sessions").update({ended_at:new Date().toISOString(),status:"cancelled"}).eq("id",state.mow.sessionId);
+    if(error){toast(error.message||"Could not cancel the mowing session");return;}
   }
+  state.mow.active=false;
+  setView("today");
 }
 function faultModal(){
   const m=state.selected;
