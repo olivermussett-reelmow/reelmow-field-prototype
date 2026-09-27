@@ -351,6 +351,7 @@ function renderGarage(){
   const due=state.dashboardDue||[];
   const attention=due.filter(x=>x.service_status==="due").length;
   const upcoming=due.filter(x=>x.service_status==="upcoming").length;
+  const historyUnknown=due.filter(x=>x.service_status==="history_unknown").length;
   const totalHours=list.reduce((sum,m)=>sum+(Number(m.current_engine_hours)||0),0);
   const attentionRows=due.filter(x=>x.service_status==="due").slice(0,5).map(x=>{
     const m=list.find(v=>v.id===x.machine_id);
@@ -358,7 +359,7 @@ function renderGarage(){
   }).join("");
   const operations=attention
     ? `<div class="attention-list">${attentionRows}</div>`
-    : `<div class="card calm-card"><div class="calm-mark">✓</div><div><strong>Fleet is up to date.</strong><div class="tiny">No published service tasks are currently due.</div></div></div>`;
+    : `<div class="card calm-card"><div class="calm-mark">✓</div><div><strong>No service is currently due.</strong><div class="tiny">No published service tasks require immediate action.${historyUnknown?` ${historyUnknown} ${historyUnknown===1?"task has":"tasks have"} no recorded service history.`:""}</div></div></div>`;
   const fleet=list.length
     ? `<div class="grid">${list.map(card).join("")}</div>`
     : `<div class="card empty"><div class="empty-icon">⚙︎</div><h2>Your Garage is empty.</h2><p class="lede" style="margin:0 auto 18px">Start by adding a machine from the REELMOW catalogue.</p><button class="btn" data-action="add">Add your first machine</button></div>`;
