@@ -922,6 +922,13 @@ function loadDemo(){
   state.garage={id:"demo-garage",name:"Main Garage",location_name:"Club Grounds"};
   if(!state.machines.length)state.machines=[{id:"demo-lf3800",garage_id:"demo-garage",machine_variant_id:demoCatalogue[0].variant_id,serial_number:"DEMO-LF3800",asset_number:"BTCC-001",nickname:"Main Outfield Mower",purchase_date:"2025-03-14",current_engine_hours:1284.5,current_reel_hours:642.2,status:"ready",variant:{variant_name:"LF3800 5-Gang"},model:{model_name:"LF3800"},manufacturer:{name:"Jacobsen"}}]
 }
+document.addEventListener("keydown",e=>{
+  if(e.key!=="Enter"&&e.key!==" ")return;
+  const target=e.target.closest("[data-action]");
+  if(!target||!target.matches(".machine-card"))return;
+  e.preventDefault();
+  target.click();
+});
 document.addEventListener("click",e=>{
   const a=e.target.closest("[data-action]");if(!a)return;
   const x=a.dataset.action;
