@@ -480,3 +480,126 @@ h3{font-weight:760}
   .glance-metric{padding:10px 8px}
   .glance-metric small{font-size:8px}
 }
+
+
+/* UX 2.0.1 — reduce dashboard chrome and increase field-tool warmth */
+.top-actions .btn.ghost{
+  border:0;
+  background:transparent;
+  padding:8px 4px;
+  min-height:40px;
+}
+.top-actions .btn.ghost:hover{background:var(--surface2)}
+.today-compact{max-width:780px;padding-top:8px}
+.today-heading{display:block;margin-bottom:18px}
+.today-heading h1{font-size:38px;max-width:620px;margin:4px 0 6px}
+.today-summary{margin:0;color:var(--muted);font-size:14px}
+.start-mow-bar{
+  min-height:70px;
+  border-radius:17px;
+  padding:15px 17px;
+  margin-bottom:30px;
+  box-shadow:0 12px 32px rgba(16,47,34,.12);
+}
+.start-mow-bar strong{font-size:16px}
+.start-mow-bar small{font-size:12px}
+.today-block{margin-top:30px}
+.today-section-head{
+  display:flex;
+  align-items:end;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom:8px;
+}
+.today-section-head h2{font-size:19px;margin:3px 0 0}
+.today-action-list,
+.today-fleet-list,
+.today-attention-list{
+  border:0;
+  border-top:1px solid var(--line);
+  border-bottom:1px solid var(--line);
+  border-radius:0;
+  background:transparent;
+  box-shadow:none;
+  overflow:visible;
+}
+.today-action-row,
+.today-machine-row,
+.today-attention-row{
+  min-height:64px;
+  width:100%;
+  border:0;
+  border-bottom:1px solid var(--line);
+  border-radius:0;
+  background:transparent;
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding:11px 2px;
+  text-align:left;
+}
+.today-action-row:last-child,
+.today-machine-row:last-child,
+.today-attention-row:last-child{border-bottom:0}
+.today-action-row:hover,
+.today-machine-row:hover,
+.today-attention-row:hover{background:transparent}
+.today-action-row:active,
+.today-machine-row:active,
+.today-attention-row:active{background:var(--surface2);transform:none}
+.today-action-row>span:nth-child(2),
+.today-machine-row .machine-row-copy,
+.today-attention-row .attention-main{flex:1;min-width:0}
+.today-action-row strong{font-size:13px}
+.today-action-row small{display:block;font-size:10px;color:var(--muted);margin-top:3px}
+.today-action-icon{
+  width:38px;height:38px;border-radius:12px;
+  display:grid;place-items:center;
+  background:var(--surface2);
+  color:var(--green);
+  flex:0 0 auto;
+}
+.today-action-icon svg{width:20px;height:20px}
+.today-action-row .row-arrow,
+.today-machine-row .row-arrow,
+.today-attention-row .row-arrow{margin-left:2px;color:#8b968f}
+.today-attention-section .today-section-head h2{font-size:17px}
+.today-attention-row{padding-left:0;padding-right:0}
+.today-attention-row .badge{margin-left:auto}
+.today-empty-row{
+  display:flex;align-items:center;gap:12px;
+  min-height:64px;padding:11px 0;
+  border-top:1px solid var(--line);
+  border-bottom:1px solid var(--line);
+}
+.today-empty-row strong,.today-empty-row small{display:block}
+.today-empty-row>div{flex:1}
+.today-empty-row small{font-size:10px;color:var(--muted);margin-top:3px}
+.today-fleet-section .today-machine-row:first-child{border-top:0}
+.today-fleet-section .machine-row-icon{
+  width:38px;height:38px;border-radius:12px;
+  background:var(--surface2);
+}
+.today-fleet-section .machine-row-copy strong{font-size:13px}
+.today-fleet-section .machine-row-copy small{font-size:10px}
+.count-pill{flex:0 0 auto}
+.mobile-nav{
+  border:1px solid rgba(216,223,217,.7);
+  background:rgba(255,255,255,.82);
+  backdrop-filter:blur(24px);
+  -webkit-backdrop-filter:blur(24px);
+  box-shadow:0 10px 35px rgba(16,47,34,.12);
+}
+.mobile-nav .nav-link{color:#66736b}
+.mobile-nav .nav-link.active{background:#e7ece7;color:var(--deep)}
+@media(max-width:700px){
+  .today-heading h1{font-size:32px;line-height:1.04}
+  .today-summary{font-size:13px}
+  .start-mow-bar{min-height:68px}
+}
+@media(max-width:430px){
+  .today-compact{padding-left:2px;padding-right:2px}
+  .today-heading h1{font-size:30px}
+  .start-mow-bar{margin-bottom:25px}
+  .today-action-row,.today-machine-row,.today-attention-row{min-height:62px}
+}
