@@ -228,20 +228,26 @@ function card(m){
   return "<article class='card machine-card' data-action='open' data-id='"+esc(m.id)+"'><div class='machine-visual'><div class='glyph'>⚙︎</div></div><div class='machine-name'>"+esc(m.nickname||n)+"</div><div class='machine-sub'>"+esc(m.manufacturer?.name||"Manufacturer")+" · "+esc(v)+"</div><div class='machine-meta'><span class='badge "+statusClass(m.status)+"'>"+esc(statusLabel(m.status))+"</span><span class='tiny'>"+(m.current_engine_hours!=null?esc(m.current_engine_hours)+" h":"No hours")+"</span></div></article>"
 }
 function renderToday(){
-  const due=(state.dashboardDue||[]).filter(x=>x.service_status==="due"||x.service_status==="upcoming");
-  const urgent=due.filter(x=>x.service_status==="due");
+  const serviceItems=(state.dashboardDue||[]).filter(x=>x.service_status==="due"||x.service_status==="upcoming"||x.service_status==="history_unknown");
+  const urgent=serviceItems.filter(x=>x.service_status==="due");
+  const historyUnknown=serviceItems.filter(x=>x.service_status==="history_unknown");
   const faults=(state.openFaults||[]).filter(x=>x.status!=="resolved");
   const machineCount=state.machines.length;
   const totalHours=state.machines.reduce((sum,m)=>sum+(Number(m.current_engine_hours)||0),0);
   const attention=urgent.slice(0,4).map(x=>{
     const m=state.machines.find(v=>v.id===x.machine_id);
-    return "<button class='today-task' data-action='open' data-id='"+esc(x.machine_id)+"'><span><strong>"+esc(m?.nickname||m?.model?.model_name||"Machine")+"</strong><small>"+esc(x.task_name||"Service task")+(x.hours_remaining!=null?" · "+esc(x.hours_remaining)+" h remaining":"")+"</small></span><span class='badge "+(x.service_status==="due"?"service":"ready")+"'>"+esc(x.service_status==="due"?"DUE":"SOON")+"</span></button>";
+    return "<button class='today-task' data-action='open' data-id='"+esc(x.machine_id)+"'><span><strong>"+esc(m?.nickname||m?.model?.model_name||"Machine")+"</strong><small>"+esc(x.task_name||"Service task")+(x.hours_remaining!=null?" · "+esc(x.hours_remaining)+" h remaining":"")+"</small></span><span class='badge service'>DUE</span></button>";
   }).join("");
+  const historyAttention=historyUnknown.slice(0,Math.max(0,4-urgent.slice(0,4).length)).map(x=>{
+    const m=state.machines.find(v=>v.id===x.machine_id);
+    return "<button class='today-task history-task' data-action='open' data-id='"+esc(x.machine_id)+"'><span><strong>"+esc(m?.nickname||m?.model?.model_name||"Machine")+"</strong><small>"+esc(x.task_name||"Service task")+" · Service history not recorded</small></span><span class='badge history'>HISTORY NOT RECORDED</span></button>";
+  }).join("");
+
   const faultAttention=faults.slice(0,4).map(x=>{
     const m=state.machines.find(v=>v.id===x.machine_id);
     return "<button class='today-task fault-task' data-action='open' data-id='"+esc(x.machine_id)+"'><span><strong>"+esc(m?.nickname||m?.model?.model_name||"Machine")+"</strong><small>"+esc(x.description)+"</small></span><span class='badge fault-"+esc(x.severity)+"'>"+esc(x.severity.toUpperCase())+"</span></button>";
   }).join("");
-  const combinedAttention=attention+faultAttention;
+  const combinedAttention=attention+historyAttention+faultAttention;
   const attentionBlock=combinedAttention
     ? "<section class='today-section'><div class='section-head'><div><div class='eyebrow'>Needs attention</div><h2>What matters now?</h2></div></div><div class='today-tasks'>"+combinedAttention+"</div></section>"
     : "<section class='today-section'><div class='calm-card card'><div class='calm-mark'>✓</div><div><strong>You're up to date.</strong><div class='tiny'>No service tasks or reported faults currently require action.</div></div></div></section>";
