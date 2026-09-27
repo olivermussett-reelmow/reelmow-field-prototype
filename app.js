@@ -387,41 +387,73 @@ function renderGarage(){
   const list=state.machines;
   const due=state.dashboardDue||[];
   const attention=due.filter(x=>x.service_status==="due").length;
-  const upcoming=due.filter(x=>x.service_status==="upcoming").length;
   const historyUnknown=due.filter(x=>x.service_status==="history_unknown").length;
   const outOfService=list.filter(m=>m.status==="out_of_service").length;
+  const active=list.length-outOfService;
   const totalHours=list.reduce((sum,m)=>sum+(Number(m.current_engine_hours)||0),0);
-  const attentionRows=due.filter(x=>x.service_status==="due").slice(0,5).map(x=>{
-    const m=list.find(v=>v.id===x.machine_id);
-    return `<button class="attention-row" data-action="open" data-id="${esc(x.machine_id)}"><span><strong>${esc(m?.nickname||m?.model?.model_name||"Machine")}</strong><small>${esc(x.task_name||"Service task")}</small></span><span class="badge service">DUE</span></button>`;
-  }).join("");
-  const operations=attention
-    ? `<div class="attention-list">${attentionRows}</div>`
-    : `<div class="card calm-card"><div class="calm-mark">${outOfService?"!":"✓"}</div><div><strong>No service is currently due.${outOfService?" Machine availability needs attention.":""}</strong><div class="tiny">No published service tasks require immediate action.${historyUnknown?` ${historyUnknown} ${historyUnknown===1?"task has":"tasks have"} no recorded service history.`:""}${outOfService?` ${outOfService} ${outOfService===1?"machine is":"machines are"} currently out of service.`:""}</div></div></div>`;
-  const fleet=list.length
-    ? `<div class="grid">${list.map(card).join("")}</div>`
-    : `<div class="card empty"><div class="empty-icon">⚙︎</div><h2>Your Garage is empty.</h2><p class="lede" style="margin:0 auto 18px">Start by adding a machine from the REELMOW catalogue.</p><button class="btn" data-action="add">Add your first machine</button></div>`;
-  mount(`
-    <section class="command-hero">
-      <div>
-        <div class="eyebrow">${esc(state.demo?"Demo Garage":state.org?.name||"Garage")}</div>
-        <h1>Machinery,<br>under control.</h1>
-        <p class="lede" style="color:#d2e1d8">A single operational view of your fleet, service position and machine records.</p>
-        <div class="actions" style="margin-top:23px"><button class="btn" data-action="add">＋ Add machine</button></div>
-      </div>
-      <div class="command-hero-side"><div class="hero-side-label">Fleet status</div><div class="hero-side-number">${list.length}</div><div class="hero-side-copy">machines in ${esc(state.garage?.name||"your Garage")}</div></div>
-    </section>
-    <section class="kpi-grid">
-      <div class="kpi-card"><div class="kpi-label">Fleet</div><div class="kpi-value">${list.length}</div><div class="kpi-meta">Total machines</div></div>
-      <div class="kpi-card ${attention?"alert":""}"><div class="kpi-label">Attention</div><div class="kpi-value">${attention}</div><div class="kpi-meta">Service items due</div></div>
-      <div class="kpi-card"><div class="kpi-label">Upcoming</div><div class="kpi-value">${upcoming}</div><div class="kpi-meta">Published service items</div></div>
-      <div class="kpi-card"><div class="kpi-label">Engine time</div><div class="kpi-value">${totalHours?Math.round(totalHours):"—"}</div><div class="kpi-meta">Recorded fleet hours</div></div>
-    </section>
-    <div class="section-head"><div><div class="eyebrow">Operations</div><h2>What needs attention?</h2></div><button class="btn secondary small" data-action="add">Add machine</button></div>
-    ${operations}
-    <div class="section-head"><div><div class="eyebrow">Garage</div><h2>Your machinery</h2></div></div>
-    ${fleet}
-  `);
+  const lead=list[0];
+  const leadStatus=lead?statusLabel(lead.status):"";
+  const leadHours=lead?.current_engine_hours!=null?Number(lead.current_engine_hours):null;
+  const leadModel=lead?.model?.model_name||lead?.variant?.variant_name||"Machine";
+  const leadName=lead?.nickname||leadModel;
+
+  if(!list.length){
+    mount("<section class='garage-empty-page'><div class='garage-kicker'>"+esc(state.demo?"Demo Garage":state.garage?.name||"Garage")+"</div><h1>Your Garage.</h1><p>Build your machinery collection and keep every asset ready for work.</p><button class='garage-primary-action' data-action='add'>Add your first machine <span>→</span></button></section>");
+    return;
+  }
+
+  const attentionCopy=outOfService
+    ? outOfService+" machine"+(outOfService===1?"":"s")+" unavailable"
+    : attention
+      ? attention+" service item"+(attention===1?"":"s")+" due"
+      : "Garage ready";
+
+  mount(
+    "<section class='garage-page'>"+
+      "<header class='garage-header'>"+
+        "<div><div class='garage-kicker'>"+esc(state.demo?"Demo Garage":state.garage?.name||"Garage")+"</div><h1>Your Garage.</h1></div>"+
+        "<div class='garage-header-meta'><span class='garage-live-dot'></span><span>"+esc(attentionCopy)+"</span><button class='garage-add-link' data-action='add'>Add machine <span>＋</span></button></div>"+
+      "</header>"+
+      "<section class='garage-hero' data-action='open' data-id='"+esc(lead.id)+"'>"+
+        "<div class='garage-hero-photo' data-garage-photo='"+esc(lead.id)+"'><div class='garage-photo-placeholder'>"+machineIcon()+"<span>Machine image</span></div></div>"+
+        "<div class='garage-hero-shade'></div>"+
+        "<div class='garage-hero-content'>"+
+          "<div class='garage-hero-top'><span class='garage-eyebrow'>"+esc(lead.manufacturer?.name||"Machine")+" · "+esc(lead.variant?.variant_name||"")+"</span><span class='garage-status-chip "+(lead.status==="out_of_service"?"attention":"")+"'><i></i>"+esc(leadStatus)+"</span></div>"+
+          "<div class='garage-hero-bottom'>"+
+            "<div><h2>"+esc(leadName)+"</h2><p>"+esc(leadModel)+(leadHours!=null?" · "+leadHours.toLocaleString()+" engine hours":"")+"</p></div>"+
+            "<div class='garage-hero-actions'><button class='garage-action-primary' data-action='garage-mow' data-id='"+esc(lead.id)+"'>Mow <span>→</span></button><button class='garage-action-secondary' data-action='open' data-id='"+esc(lead.id)+"'>Open machine</button></div>"+
+          "</div>"+
+        "</div>"+
+      "</section>"+
+      "<section class='garage-summary'>"+
+        "<div><span>Fleet</span><strong>"+list.length+"</strong><small>machines</small></div>"+
+        "<div><span>Available</span><strong>"+active+"</strong><small>ready for work</small></div>"+
+        "<div><span>Engine time</span><strong>"+(totalHours?Math.round(totalHours).toLocaleString():"—")+"</strong><small>recorded hours</small></div>"+
+        "<div class='"+(historyUnknown?"has-warning":"")+"'><span>Service</span><strong>"+(attention?attention:"Ready")+"</strong><small>"+(historyUnknown?historyUnknown+" history unknown":attention?"items due":"no items due")+"</small></div>"+
+      "</section>"+
+      (list.length>1?"<section class='garage-collection'><div class='garage-section-heading'><div><span class='garage-kicker'>Equipment</span><h2>The Garage</h2></div><span>"+list.length+" assets</span></div><div class='garage-machine-grid'>"+list.slice(1).map(m=>{
+        const hrs=m.current_engine_hours!=null?Number(m.current_engine_hours).toLocaleString()+" h":"Hours not recorded";
+        return "<article class='garage-machine-tile' data-action='open' data-id='"+esc(m.id)+"'><div class='garage-tile-photo' data-garage-photo='"+esc(m.id)+"'><div class='garage-photo-placeholder'>"+machineIcon()+"</div></div><div class='garage-tile-overlay'></div><div class='garage-tile-content'><span>"+esc(m.manufacturer?.name||"Machine")+"</span><h3>"+esc(m.nickname||m.model?.model_name||"Machine")+"</h3><small>"+esc(statusLabel(m.status))+" · "+hrs+"</small></div></article>";
+      }).join("")+"</div></section>":"")+
+      "<section class='garage-quick'><div class='garage-section-heading'><div><span class='garage-kicker'>Workshop</span><h2>Quick access</h2></div></div><div class='garage-quick-links'><button data-action='quick-hours'>Log hours <span>→</span></button><button data-action='quick-service'>Record service <span>→</span></button><button data-action='quick-fault'>Report a problem <span>→</span></button></div></section>"+
+    "</section>"
+  );
+  loadGaragePhotos(list);
+}
+async function loadGaragePhotos(machines){
+  if(state.demo)return;
+  const ids=machines.map(m=>m.id).filter(Boolean);
+  if(!ids.length)return;
+  const {data,error}=await state.client.schema("garage").from("machine_photos").select("machine_id,storage_bucket,storage_path,caption,created_at").in("machine_id",ids).order("created_at",{ascending:false});
+  if(error)return;
+  const latest=new Map();
+  for(const p of data||[])if(!latest.has(p.machine_id))latest.set(p.machine_id,p);
+  for(const [id,p] of latest){
+    const signed=await state.client.storage.from(p.storage_bucket).createSignedUrl(p.storage_path,3600);
+    if(signed.error)continue;
+    const el=document.querySelector("[data-garage-photo='"+CSS.escape(id)+"']");
+    if(el)el.innerHTML="<img src='"+esc(signed.data.signedUrl)+"' alt='"+esc(p.caption||"Machine photo")+"' loading='eager'>";
+  }
 }
 
 function renderDetail(){
@@ -963,6 +995,7 @@ document.addEventListener("click",e=>{
   if(x==="quick-fault")return machinePicker("fault");
   if(x==="mow"){return machinePicker("mow")}
     if(x==="machine-mow"){return startMow(state.selected?.id)}
+  if(x==="garage-mow"){state.selected=state.machines.find(v=>v.id===a.dataset.id)||null;return startMow(state.selected?.id)}
   if(x==="mow-pause")return pauseMow();
   if(x==="mow-stop")return finishMow();
   if(x==="exit-mow")return exitMow();
