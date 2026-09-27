@@ -223,9 +223,22 @@ function renderGarageSetup(){
   mount("<div style='max-width:620px;margin:7vh auto'><div class='card'><div class='eyebrow'>Garage</div><h1 style='font-size:40px'>Create your first Garage.</h1><p class='lede'>A Garage is a physical machinery location within your organisation.</p><form id='garage' style='margin-top:25px'><div class='field'><label>Garage name</label><input class='input' id='garage-name' value='Main Garage' required></div><div class='field'><label>Location</label><input class='input' id='garage-location'></div><button class='btn'>Create Garage</button></form></div></div>");
   document.querySelector("#garage").addEventListener("submit",createGarage)
 }
+function machineIcon(){
+  return "<svg class='machine-svg' viewBox='0 0 64 48' aria-hidden='true'><rect x='18' y='14' width='30' height='17' rx='4' fill='none' stroke='currentColor' stroke-width='2.6'/><path d='M48 19h7l4 7v5H48M18 23H9l-4 7h13M15 38h7M43 38h7' fill='none' stroke='currentColor' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/><circle cx='17' cy='38' r='5' fill='none' stroke='currentColor' stroke-width='2.6'/><circle cx='46' cy='38' r='5' fill='none' stroke='currentColor' stroke-width='2.6'/></svg>";
+}
+function actionIcon(type){
+  const icons={
+    mow:"<svg viewBox='0 0 24 24' aria-hidden='true'><path d='M5 17h14M7 17V9h7l3 3v5M9 9V6h5M8 20h2M15 20h2' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/></svg>",
+    hours:"<svg viewBox='0 0 24 24' aria-hidden='true'><circle cx='12' cy='12' r='8' fill='none' stroke='currentColor' stroke-width='1.8'/><path d='M12 8v4l3 2' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linecap='round'/></svg>",
+    service:"<svg viewBox='0 0 24 24' aria-hidden='true'><path d='M14.5 6.5a4 4 0 0 0-5 5L5 16l3 3 4.5-4.5a4 4 0 0 0 5-5l-2.3 2.3-2.5-2.5 2.3-2.3Z' fill='none' stroke='currentColor' stroke-width='1.7' stroke-linejoin='round'/></svg>",
+    fault:"<svg viewBox='0 0 24 24' aria-hidden='true'><path d='M12 4 21 19H3L12 4Z' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linejoin='round'/><path d='M12 9v4M12 16v.5' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linecap='round'/></svg>"
+  };
+  return icons[type]||icons.mow;
+}
 function card(m){
   const n=m.model?.model_name||"Machine",v=m.variant?.variant_name||"Catalogue variant";
-  return "<article class='card machine-card' data-action='open' data-id='"+esc(m.id)+"'><div class='machine-visual'><div class='glyph'>⚙︎</div></div><div class='machine-name'>"+esc(m.nickname||n)+"</div><div class='machine-sub'>"+esc(m.manufacturer?.name||"Manufacturer")+" · "+esc(v)+"</div><div class='machine-meta'><span class='badge "+statusClass(m.status)+"'>"+esc(statusLabel(m.status))+"</span><span class='tiny'>"+(m.current_engine_hours!=null?esc(m.current_engine_hours)+" h":"No hours")+"</span></div></article>"
+  const status=statusLabel(m.status);
+  return "<article class='card machine-card' data-action='open' data-id='"+esc(m.id)+"' tabindex='0' role='button' aria-label='Open "+esc(m.nickname||n)+"'><div class='machine-visual'><div class='glyph'>"+machineIcon()+"</div></div><div class='machine-name'>"+esc(m.nickname||n)+"</div><div class='machine-sub'>"+esc(m.manufacturer?.name||"Manufacturer")+" · "+esc(v)+"</div><div class='machine-meta'><span class='badge "+statusClass(m.status)+"'>"+esc(status)+"</span><span class='tiny'>"+(m.current_engine_hours!=null?esc(m.current_engine_hours)+" h":"No hours")+"</span></div></article>"
 }
 function renderToday(){
   const serviceItems=(state.dashboardDue||[]).filter(x=>x.service_status==="due"||x.service_status==="upcoming"||x.service_status==="history_unknown");
@@ -235,30 +248,52 @@ function renderToday(){
   const machineCount=state.machines.length;
   const outOfService=state.machines.filter(m=>m.status==="out_of_service").length;
   const totalHours=state.machines.reduce((sum,m)=>sum+(Number(m.current_engine_hours)||0),0);
-  const attention=urgent.slice(0,4).map(x=>{
-    const m=state.machines.find(v=>v.id===x.machine_id);
-    return "<button class='today-task' data-action='open' data-id='"+esc(x.machine_id)+"'><span><strong>"+esc(m?.nickname||m?.model?.model_name||"Machine")+"</strong><small>"+esc(x.task_name||"Service task")+(x.hours_remaining!=null?" · "+esc(x.hours_remaining)+" h remaining":"")+"</small></span><span class='badge service'>DUE</span></button>";
-  }).join("");
-  const historyAttention=historyUnknown.slice(0,Math.max(0,4-urgent.slice(0,4).length)).map(x=>{
-    const m=state.machines.find(v=>v.id===x.machine_id);
-    return "<button class='today-task history-task' data-action='open' data-id='"+esc(x.machine_id)+"'><span><strong>"+esc(m?.nickname||m?.model?.model_name||"Machine")+"</strong><small>"+esc(x.task_name||"Service task")+" · Service history not recorded</small></span><span class='badge history'>HISTORY NOT RECORDED</span></button>";
-  }).join("");
 
-  const faultAttention=faults.slice(0,4).map(x=>{
-    const m=state.machines.find(v=>v.id===x.machine_id);
-    return "<button class='today-task fault-task' data-action='open' data-id='"+esc(x.machine_id)+"'><span><strong>"+esc(m?.nickname||m?.model?.model_name||"Machine")+"</strong><small>"+esc(x.description)+"</small></span><span class='badge fault-"+esc(x.severity)+"'>"+esc(x.severity.toUpperCase())+"</span></button>";
-  }).join("");
-  const combinedAttention=attention+historyAttention+faultAttention;
-  const attentionBlock=combinedAttention
-    ? "<section class='today-section'><div class='section-head'><div><div class='eyebrow'>Needs attention</div><h2>What matters now?</h2></div></div><div class='today-tasks'>"+combinedAttention+"</div></section>"
-    : "<section class='today-section'><div class='calm-card card'><div class='calm-mark'>✓</div><div><strong>You're up to date.</strong><div class='tiny'>No service tasks or reported faults currently require action.</div></div></div></section>";
-  const fleetLabel=outOfService?"Fleet needs attention":"Fleet operational";
-  const fleetMeta=outOfService?(outOfService+" machine"+(outOfService===1?" is":"s are")+" out of service · "+(totalHours?Math.round(totalHours)+" recorded hours":"No hours recorded")):(machineCount+" machine"+(machineCount===1?"":"s")+" · "+(totalHours?Math.round(totalHours)+" recorded hours":"No hours recorded"));
-  mount("<section class='today-hero'><div><div class='eyebrow'>"+esc(state.demo?"Demo workspace":state.org?.name||"Your workspace")+"</div><h1>Good morning.<br>Let's get to work.</h1><p class='lede' style='color:#d2e1d8'>The important things are here. Everything else can stay out of the way.</p></div><div class='today-status'><span class='status-dot'></span><div><strong>"+fleetLabel+"</strong><small>"+fleetMeta+"</small></div></div></section>"+quickActions()+attentionBlock+"<section class='today-section'><div class='section-head'><div><div class='eyebrow'>Your Garage</div><h2>Machinery at a glance</h2></div><button class='btn secondary small' data-action='garage'>View Garage</button></div><div class='today-machine-strip'>"+(state.machines.length?state.machines.slice(0,4).map(card).join(""):"<div class='card empty'><h2>Start with your first machine.</h2><p class='lede'>Build the operational memory of your Garage.</p><button class='btn' data-action='quick-add'>Add machine</button></div>")+"</div></section>");
+  const attentionRows=[
+    ...urgent.slice(0,3).map(x=>{
+      const m=state.machines.find(v=>v.id===x.machine_id);
+      return "<button class='today-task' data-action='open' data-id='"+esc(x.machine_id)+"'><span><strong>"+esc(m?.nickname||m?.model?.model_name||"Machine")+"</strong><small>"+esc(x.task_name||"Service task")+(x.hours_remaining!=null?" · "+esc(x.hours_remaining)+" h remaining":"")+"</small></span><span class='badge service'>DUE</span></button>";
+    }),
+    ...faults.slice(0,3).map(x=>{
+      const m=state.machines.find(v=>v.id===x.machine_id);
+      return "<button class='today-task fault-task' data-action='open' data-id='"+esc(x.machine_id)+"'><span><strong>"+esc(m?.nickname||m?.model?.model_name||"Machine")+"</strong><small>"+esc(x.description)+"</small></span><span class='badge fault'>"+esc(x.severity.toUpperCase())+"</span></button>";
+    }),
+    ...historyUnknown.slice(0,2).map(x=>{
+      const m=state.machines.find(v=>v.id===x.machine_id);
+      return "<button class='today-task history-task' data-action='open' data-id='"+esc(x.machine_id)+"'><span><strong>"+esc(m?.nickname||m?.model?.model_name||"Machine")+"</strong><small>"+esc(x.task_name||"Service task")+" · Service history not recorded</small></span><span class='badge history'>UNKNOWN</span></button>";
+    })
+  ].slice(0,5).join("");
+
+  const attentionBlock=attentionRows
+    ? "<section class='today-section'><div class='section-head'><div><div class='eyebrow'>Needs attention</div><h2>Deal with these first.</h2></div></div><div class='today-tasks'>"+attentionRows+"</div></section>"
+    : "<section class='today-section'><div class='calm-card card'><div class='calm-mark'>✓</div><div><strong>Nothing needs your attention.</strong><div class='tiny'>No service or machine problems currently require action.</div></div></div></section>";
+
+  const fleetLabel=outOfService?"Availability needs attention":"All machines available";
+  const fleetMeta=outOfService
+    ? outOfService+" machine"+(outOfService===1?" is":"s are")+" out of service"
+    : machineCount+" machine"+(machineCount===1?"":"s")+" · "+(totalHours?Math.round(totalHours)+" recorded hours":"No hours recorded");
+
+  mount(
+    "<section class='today-hero'>"+
+      "<div><div class='eyebrow'>Today · "+esc(state.garage?.name||"Garage")+"</div><h1>Ready for the day.</h1><p class='lede' style='color:#d2e1d8'>Your machines, today's work and anything that needs attention.</p></div>"+
+      "<div class='today-status'><span class='status-dot "+(outOfService?"status-attention":"")+"'></span><div><strong>"+fleetLabel+"</strong><small>"+fleetMeta+"</small></div></div>"+
+    "</section>"+
+    quickActions()+
+    attentionBlock+
+    "<section class='today-section'><div class='section-head'><div><div class='eyebrow'>Fleet</div><h2>Your machines.</h2></div><button class='btn secondary small' data-action='garage'>View Garage</button></div><div class='today-machine-strip'>"+
+      (state.machines.length?state.machines.slice(0,4).map(card).join(""):"<div class='card empty'><h2>Start with your first machine.</h2><p class='lede'>Add the first physical asset to your Garage.</p><button class='btn' data-action='quick-add'>Add machine</button></div>")+
+    "</div></section>"
+  );
 }
 function quickActions(){
-  return "<div class='quick-actions'><button class='quick-action quick-mow' data-action='mow'><span class='quick-icon'>▰</span><strong>Start Mow Mode</strong><small>GPS track + speed</small></button><button class='quick-action' data-action='quick-add'><span class='quick-icon'>＋</span><strong>Add machine</strong><small>Catalogue + plate</small></button><button class='quick-action' data-action='quick-hours'><span class='quick-icon'>◷</span><strong>Update hours</strong><small>Fast field entry</small></button><button class='quick-action' data-action='quick-service'><span class='quick-icon'>✓</span><strong>Record service</strong><small>Complete a task</small></button><button class='quick-action' data-action='quick-fault'><span class='quick-icon'>!</span><strong>Report problem</strong><small>Capture an issue</small></button></div>";
+  return "<section class='quick-actions'>"+
+    "<button class='quick-action quick-mow' data-action='mow'><span class='quick-icon'>"+actionIcon("mow")+"</span><strong>Start mowing</strong><small>Choose a machine and begin tracking</small></button>"+
+    "<button class='quick-action' data-action='quick-hours'><span class='quick-icon'>"+actionIcon("hours")+"</span><strong>Log hours</strong><small>Update a machine meter</small></button>"+
+    "<button class='quick-action' data-action='quick-service'><span class='quick-icon'>"+actionIcon("service")+"</span><strong>Record service</strong><small>Log completed maintenance</small></button>"+
+    "<button class='quick-action' data-action='quick-fault'><span class='quick-icon'>"+actionIcon("fault")+"</span><strong>Report problem</strong><small>Capture a machine issue</small></button>"+
+  "</section>";
 }
+
 function haversineM(a,b){
   if(!a||!b)return 0;
   const R=6371000,rad=Math.PI/180,dLat=(b.latitude-a.latitude)*rad,dLon=(b.longitude-a.longitude)*rad;
@@ -887,6 +922,13 @@ function loadDemo(){
   state.garage={id:"demo-garage",name:"Main Garage",location_name:"Club Grounds"};
   if(!state.machines.length)state.machines=[{id:"demo-lf3800",garage_id:"demo-garage",machine_variant_id:demoCatalogue[0].variant_id,serial_number:"DEMO-LF3800",asset_number:"BTCC-001",nickname:"Main Outfield Mower",purchase_date:"2025-03-14",current_engine_hours:1284.5,current_reel_hours:642.2,status:"ready",variant:{variant_name:"LF3800 5-Gang"},model:{model_name:"LF3800"},manufacturer:{name:"Jacobsen"}}]
 }
+document.addEventListener("keydown",e=>{
+  if(e.key!=="Enter"&&e.key!==" ")return;
+  const target=e.target.closest("[data-action]");
+  if(!target||!target.matches(".machine-card"))return;
+  e.preventDefault();
+  target.click();
+});
 document.addEventListener("click",e=>{
   const a=e.target.closest("[data-action]");if(!a)return;
   const x=a.dataset.action;
