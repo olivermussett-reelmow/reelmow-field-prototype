@@ -1,4 +1,4 @@
-const VERSION="20260927-8";
+const VERSION="20260927-9";
 const CACHE="reelmow-shell-"+VERSION;
 const ASSETS=["./","./index.html","./styles.css","./app.js","./manifest.webmanifest","./icon.svg"];
 
@@ -38,15 +38,14 @@ self.addEventListener("fetch",event=>{
   if(url.origin!==self.location.origin) return;
 
   event.respondWith(
-    caches.match(event.request).then(cached=>{
-      const network=fetch(event.request).then(response=>{
+    fetch(event.request)
+      .then(response=>{
         if(response.ok){
           const copy=response.clone();
           caches.open(CACHE).then(cache=>cache.put(event.request,copy));
         }
         return response;
-      }).catch(()=>cached);
-      return cached||network;
-    })
+      })
+      .catch(()=>caches.match(event.request))
   );
 });
