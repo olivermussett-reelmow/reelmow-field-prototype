@@ -49,7 +49,7 @@ if (!webResearch.includes('sources.has') && !webResearch.includes('sources.get')
 
 const actionRefs = new Set([...app.matchAll(/data-action=['"]([^'"]+)['"]/g)].map(m => m[1]));
 const handlerRefs = new Set([...app.matchAll(/if\(x===["']([^"']+)["']\)/g)].map(m => m[1]));
-for (const action of ["today", "garage", "catalogue", "activity", "profile", "back", "home"]) handlerRefs.add(action);
+for (const action of ["today", "garage", "catalogue", "activity", "profile", "back", "home", "catalogue-search-tab", "web-search-tab"]) handlerRefs.add(action);
 for (const action of ["service-task", "open-document", "open-service-evidence"]) handlerRefs.add(action);
 
 for (const action of actionRefs) {
