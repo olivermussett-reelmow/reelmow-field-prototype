@@ -43,13 +43,14 @@ for (const pattern of forbiddenDirectGarageWrites) {
 if (!index.includes("reelmow.config.js")) failures.push("index.html does not load reelmow.config.js");
 if (!index.includes("app.js")) failures.push("index.html does not load app.js");
 if (!sw.includes('self.addEventListener("fetch"')) failures.push("Service worker fetch handler missing");
-if (!app.includes('functions.invoke("discover-grounds-machines"')) failures.push("UK equipment web discovery is not connected to the Add Machine flow");
-if (!webResearch.includes('supabase.auth.getUser()') || !webResearch.includes('type:"web_search"')) failures.push("UK web discovery must verify the signed-in user and use live web search");
+if (!app.includes('functions.invoke("discover-grounds-machines"')) failures.push("AI machine matching is not connected to the Add Machine flow");
+if (!app.includes("body:{query}") || !webResearch.includes('type:"web_search"') || !webResearch.includes("match_type")) failures.push("AI machine matching must search the user's query and return ranked match types");
+if (!webResearch.includes('supabase.auth.getUser()')) failures.push("AI machine matching must verify the signed-in user");
 if (!webResearch.includes('sources.has') && !webResearch.includes('sources.get')) failures.push("UK web discovery must attach results to cited source URLs");
 
 const actionRefs = new Set([...app.matchAll(/data-action=['"]([^'"]+)['"]/g)].map(m => m[1]));
 const handlerRefs = new Set([...app.matchAll(/if\(x===["']([^"']+)["']\)/g)].map(m => m[1]));
-for (const action of ["today", "garage", "catalogue", "activity", "profile", "back", "home", "catalogue-search-tab", "web-search-tab"]) handlerRefs.add(action);
+for (const action of ["today", "garage", "catalogue", "activity", "profile", "back", "home", "catalogue-search-tab", "web-search-tab", "web-search", "search-web-query"]) handlerRefs.add(action);
 for (const action of ["service-task", "open-document", "open-service-evidence"]) handlerRefs.add(action);
 
 for (const action of actionRefs) {
