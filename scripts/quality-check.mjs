@@ -49,6 +49,7 @@ if (!app.includes("body:{query}") || !webResearch.includes('type:"web_search"') 
 if (!app.includes("add-web-machine") || !app.includes("AI web match · not catalogue verified")) failures.push("AI web matches must offer an add flow that labels unverified identity");
 if (!webResearch.includes('supabase.auth.getUser()')) failures.push("AI machine matching must verify the signed-in user");
 if (!webResearch.includes('sources.has') && !webResearch.includes('sources.get')) failures.push("UK web discovery must attach results to cited source URLs");
+if (!webResearch.includes("function productImage") || !webResearch.includes('"og:image"') || !app.includes("MANUFACTURER IMAGE") || !app.includes("p_discovered_image_url")) failures.push("AI machine matches must extract, attribute, display, and save manufacturer product images");
 
 const actionRefs = new Set([...app.matchAll(/data-action=['"]([^'"]+)['"]/g)].map(m => m[1]));
 const handlerRefs = new Set([...app.matchAll(/if\(x===["']([^"']+)["']\)/g)].map(m => m[1]));
