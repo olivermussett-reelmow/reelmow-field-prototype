@@ -68,7 +68,7 @@ SELECT
         ELSE FALSE
       END
       OR sr.interval_calendar_days IS NOT NULL
-      AND (COALESCE(ls.serviced_at, m.created_at) + make_interval(days => min(sr.interval_calendar_days)))::date <= CURRENT_DATE
+      AND (COALESCE(ls.serviced_at, m.created_at) + make_interval(days => sr.interval_calendar_days))::date <= CURRENT_DATE
     ) THEN 'due'
     WHEN ls.serviced_at IS NULL
       AND (
