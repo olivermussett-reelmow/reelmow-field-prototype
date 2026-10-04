@@ -15,7 +15,7 @@ const demoCatalogue=[
   {model_id:"demo-allett-shaver",manufacturer_name:"Allett",model_name:"Shaver",variant_id:"demo-allett-shaver-24",variant_name:"Shaver 24",machine_type:"Cylinder Mower",rank:.97},
   {model_id:"demo-atco-royale",manufacturer_name:"Atco",model_name:"Royale 24",variant_id:"demo-atco-royale-ic",variant_name:"Royale 24 I/C - F016310542",machine_type:"Cylinder Mower",rank:.96}
 ];
-const state={client:null,user:null,role:null,org:null,garage:null,orgs:[],garages:[],workspaceNeedsSelection:false,offline:false,syncing:false,outboxCount:0,machines:[],selected:null,specs:[],serviceDue:[],serviceRecords:[],hoursLog:[],catalogueResults:[],webResults:[],webCitations:[],webSport:"golf",webResearchCaveat:"",dashboardDue:[],openFaults:[],machineFaults:[],activity:[],mow:{active:false,paused:false,sessionId:null,machineId:null,watchId:null,startedAt:null,lastPoint:null,trackPoints:[],distanceM:0,points:0,accuracyM:null,speedMps:null,headingDeg:null,pattern:"stripe",targetSpeedKph:null},loading:false,webResearching:false,error:"",pendingPlateFile:null,pendingIdentification:null,quickAction:null,view:localStorage.getItem("reelmow.view.v1")||"garage",demo:localStorage.getItem(DEMO_KEY)==="true" && !(window.REELMOW_CONFIG?.url && window.REELMOW_CONFIG?.key)};
+const state={client:null,user:null,role:null,org:null,garage:null,orgs:[],garages:[],workspaceNeedsSelection:false,offline:false,syncing:false,outboxCount:0,machines:[],selected:null,specs:[],serviceDue:[],serviceRecords:[],hoursLog:[],catalogueResults:[],webResults:[],webCitations:[],webResearchCaveat:"",dashboardDue:[],openFaults:[],machineFaults:[],activity:[],mow:{active:false,paused:false,sessionId:null,machineId:null,watchId:null,startedAt:null,lastPoint:null,trackPoints:[],distanceM:0,points:0,accuracyM:null,speedMps:null,headingDeg:null,pattern:"stripe",targetSpeedKph:null},loading:false,webResearching:false,error:"",pendingPlateFile:null,pendingIdentification:null,pendingWebMachine:null,quickAction:null,view:localStorage.getItem("reelmow.view.v1")||"garage",demo:localStorage.getItem(DEMO_KEY)==="true" && !(window.REELMOW_CONFIG?.url && window.REELMOW_CONFIG?.key)};
 
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const val=s=>document.querySelector(s)?.value.trim()||"";
@@ -63,7 +63,7 @@ async function syncOutbox(){
   if(remaining.length!==items.length){toast(remaining.length?"Some saved changes are still waiting to sync.":"Saved changes synced.");try{await loadMachines()}catch{}}
 }
 function modal(h){document.querySelector(".modal-backdrop")?.remove();document.body.insertAdjacentHTML("beforeend",h)}
-function closeModal(){document.querySelector(".modal-backdrop")?.remove();state.pendingPlateFile=null;state.pendingIdentification=null}
+function closeModal(){document.querySelector(".modal-backdrop")?.remove();state.pendingPlateFile=null;state.pendingIdentification=null;state.pendingWebMachine=null}
 async function imageDataUrl(file,maxSize=1600,quality=.82){
   if(!file||!file.type.startsWith("image/")) throw new Error("Please choose an image");
   if(file.size>12_000_000) throw new Error("Image is too large. Please choose a photo under 12 MB.");
@@ -145,16 +145,16 @@ function renderWorkspacePicker(){
   mount("<div style='max-width:760px;margin:7vh auto'><div class='card'><div class='eyebrow'>Workspace selection</div><h1 style='font-size:40px'>Choose where you're working.</h1><p class='lede'>Select the organisation and physical Garage you want to operate.</p>"+rows+"</div></div>");
 }
 async function loadMachines(){
-  const {data,error}=await state.client.schema("garage").from("machines").select("id,garage_id,machine_variant_id,serial_number,asset_number,nickname,purchase_date,purchase_price,warranty_start_date,warranty_end_date,warranty_provider,ownership_type,ownership_name,current_engine_hours,current_reel_hours,status,notes,created_at").eq("garage_id",state.garage.id).order("created_at",{ascending:false});if(error)throw error;
+  const {data,error}=await state.client.schema("garage").from("machines").select("id,garage_id,machine_variant_id,serial_number,asset_number,nickname,purchase_date,purchase_price,warranty_start_date,warranty_end_date,warranty_provider,ownership_type,ownership_name,current_engine_hours,current_reel_hours,status,notes,discovered_manufacturer,discovered_model,discovered_equipment_type,discovered_match_type,discovered_match_reason,discovered_evidence,discovered_source_urls,created_at").eq("garage_id",state.garage.id).order("created_at",{ascending:false});if(error)throw error;
   const rows=data||[];if(!rows.length){state.machines=[];return}
   const vids=rows.map(x=>x.machine_variant_id).filter(Boolean);
-  const {data:v,error:ve}=await state.client.schema("catalogue").from("machine_variants").select("id,variant_name,machine_model_id").in("id",vids);if(ve)throw ve;
+  const {data:v,error:ve}=vids.length?await state.client.schema("catalogue").from("machine_variants").select("id,variant_name,machine_model_id").in("id",vids):{data:[],error:null};if(ve)throw ve;
   const mids=(v||[]).map(x=>x.machine_model_id);
   const {data:mo,error:me}=mids.length?await state.client.schema("catalogue").from("machine_models").select("id,model_name,model_code,manufacturer_id").in("id",mids):{data:[]};if(me)throw me;
   const fids=(mo||[]).map(x=>x.manufacturer_id);
   const {data:f,error:fe}=fids.length?await state.client.schema("catalogue").from("manufacturers").select("id,name").in("id",fids):{data:[]};if(fe)throw fe;
   const vm=new Map((v||[]).map(x=>[x.id,x])),mm=new Map((mo||[]).map(x=>[x.id,x])),fm=new Map((f||[]).map(x=>[x.id,x]));
-  state.machines=rows.map(x=>{const vv=vm.get(x.machine_variant_id),model=vv&&mm.get(vv.machine_model_id),man=model&&fm.get(model.manufacturer_id);return {...x,variant:vv,model,manufacturer:man}});
+  state.machines=rows.map(x=>{const vv=vm.get(x.machine_variant_id),catalogueModel=vv&&mm.get(vv.machine_model_id),catalogueManufacturer=catalogueModel&&fm.get(catalogueModel.manufacturer_id);return {...x,variant:vv||(x.discovered_model?{variant_name:"AI web match · unverified"}:null),model:catalogueModel||(x.discovered_model?{model_name:x.discovered_model}:null),manufacturer:catalogueManufacturer||(x.discovered_manufacturer?{name:x.discovered_manufacturer}:null)}});
   const ids=state.machines.map(x=>x.id);
   if(!ids.length){state.dashboardDue=[];return}
   const {data:due,error:de}=await state.client.schema("garage").from("machine_service_due").select("machine_id,service_status,hours_remaining,task_name").in("machine_id",ids);
@@ -178,10 +178,10 @@ async function search(q){
       :"<div class='empty-mini'><div class='tiny'><b>No verified catalogue record yet.</b></div><div class='tiny' style='margin-top:5px'>Let AI search the web for the exact mower or its closest real match.</div><button class='btn small research-search-button' style='margin-top:12px' data-action='search-web-query' data-query='"+esc(q.trim())+"'>Find closest match online <span>↗</span></button></div>";
   }catch(e){box.innerHTML="<div class='error'>"+esc(e.message||"Search failed")+"</div>"}finally{state.loading=false}
 }
-function webResultCard(r){
+function webResultCard(r,index){
   const signal={exact_match:"Exact model",close_match:"Closest model",related_option:"Related option"}[r.match_type]||"Web match";
   const refs=(r.source_urls||[]).map(u=>state.webCitations.find(c=>c.url===u)).filter(Boolean);
-  return "<article class='web-result'><div class='web-result-top'><span class='web-result-signal'>"+esc(signal)+"</span><span class='web-result-sport'>UK web match</span></div><div class='web-result-title'>"+esc(r.manufacturer)+" <strong>"+esc(r.model)+"</strong></div><div class='web-result-type'>"+esc(r.equipment_type)+"</div><p class='match-reason'>"+esc(r.match_reason)+"</p><p>"+esc(r.evidence)+"</p><div class='web-result-sources'>"+(refs.length?refs.map(c=>"<a href='"+esc(c.url)+"' target='_blank' rel='noopener noreferrer'>"+esc(c.title||new URL(c.url).hostname)+" ↗</a>").join(""):"<span>Open source details unavailable</span>")+"</div><button class='web-result-action' data-action='search-web-result' data-query='"+esc([r.manufacturer,r.model].join(" "))+"'>Check verified catalogue <span>↗</span></button></article>";
+  return "<article class='web-result'><div class='web-result-top'><span class='web-result-signal'>"+esc(signal)+"</span><span class='web-result-sport'>UK web match</span></div><div class='web-result-title'>"+esc(r.manufacturer)+" <strong>"+esc(r.model)+"</strong></div><div class='web-result-type'>"+esc(r.equipment_type)+"</div><p class='match-reason'>"+esc(r.match_reason)+"</p><p>"+esc(r.evidence)+"</p><div class='web-result-sources'>"+(refs.length?refs.map(c=>"<a href='"+esc(c.url)+"' target='_blank' rel='noopener noreferrer'>"+esc(c.title||new URL(c.url).hostname)+" ↗</a>").join(""):"<span>Open source details unavailable</span>")+"</div><div class='web-result-actions'><button class='btn small web-result-add' data-action='add-web-machine' data-index='"+index+"'>Add to Garage</button><button class='web-result-action' data-action='search-web-result' data-query='"+esc([r.manufacturer,r.model].join(" "))+"'>Check verified catalogue <span>↗</span></button></div></article>";
 }
 async function searchGroundsWeb(q){
   const box=document.querySelector("#web-results");if(!box)return;
@@ -198,6 +198,36 @@ async function searchGroundsWeb(q){
     box.innerHTML=(state.webResults.length?state.webResults.map(webResultCard).join(""):"<div class='empty-mini'><b>No source-verified machine match found.</b><div class='tiny' style='margin-top:5px'>Check the spelling, try a shorter model name, or scan the machine plate.</div></div>")+(state.webResearchCaveat?"<div class='web-research-note'>"+esc(state.webResearchCaveat)+(state.demo?" <span>DEMO EXAMPLE</span>":"")+"</div>":"");
   }catch(e){box.innerHTML="<div class='error'>"+esc(e.message||"Web search is unavailable")+"</div><div class='tiny' style='margin-top:8px'>Try again, or scan the machine plate for an exact catalogue match.</div>"}
   finally{state.webResearching=false}
+}
+function addWebMatchedMachine(machine){
+  if(!machine||!machine.manufacturer||!machine.model)return toast("This result is missing a verified machine identity.");
+  state.pendingWebMachine=machine;
+  const label=machine.match_type==="exact_match"?"Exact model from web search":machine.match_type==="close_match"?"Closest model from web search":"Related model from web search";
+  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Add a web match</div><h2>"+esc(machine.manufacturer)+" "+esc(machine.model)+"</h2><p class='tiny'>"+esc(label)+" · Not yet in the verified catalogue</p></div><button class='close' data-action='close'>×</button></div><div class='web-add-notice'><b>Save this mower to your Garage?</b><span>It will be stored as a web-identified machine, with its source links. It won’t be added to REELMOW’s verified catalogue.</span><span>Model specifications and a service schedule won’t be available until the catalogue has an exact match.</span></div><form id='web-machine-form'><div class='field'><label>Machine name in your Garage</label><input class='input' id='web-machine-nickname' value='"+esc(machine.manufacturer+" "+machine.model)+"' maxlength='120'></div><div class='grid two'><div class='field'><label>Serial number <span class='optional'>Optional</span></label><input class='input' id='web-machine-serial' maxlength='120'></div><div class='field'><label>Asset number <span class='optional'>Optional</span></label><input class='input' id='web-machine-asset' maxlength='120'></div></div><div class='grid two'><div class='field'><label>Engine hours <span class='optional'>Optional</span></label><input class='input' id='web-machine-hours' type='number' min='0' step='.1'></div><div class='field'><label>Reel hours <span class='optional'>Optional</span></label><input class='input' id='web-machine-reel-hours' type='number' min='0' step='.1'></div></div><div class='field'><label>Notes <span class='optional'>Optional</span></label><textarea class='input' id='web-machine-notes' rows='2'></textarea></div><div class='web-add-source'><strong>Match evidence</strong><p>"+esc(machine.match_reason)+"</p><a href='"+esc(machine.source_urls?.[0]||"#")+"' target='_blank' rel='noopener noreferrer'>Open source ↗</a></div><button class='btn web-add-submit' style='width:100%;margin-top:16px'>Add to Garage as unverified</button></form></div></div>");
+  document.querySelector("#web-machine-form").addEventListener("submit",saveWebMatchedMachine);
+}
+async function saveWebMatchedMachine(e){
+  e.preventDefault();
+  if(!canOperate())return toast("Your role is read-only.");
+  const machine=state.pendingWebMachine;if(!machine)return toast("Choose a web match first.");
+  const engineHours=num("#web-machine-hours"),reelHours=num("#web-machine-reel-hours");
+  if(engineHours!=null&&engineHours<0||reelHours!=null&&reelHours<0)return toast("Hours cannot be negative.");
+  const record={id:crypto.randomUUID(),garage_id:state.garage.id,machine_variant_id:null,nickname:val("#web-machine-nickname")||machine.manufacturer+" "+machine.model,serial_number:val("#web-machine-serial")||null,asset_number:val("#web-machine-asset")||null,current_engine_hours:engineHours,current_reel_hours:reelHours,status:"ready",discovered_manufacturer:machine.manufacturer,discovered_model:machine.model,discovered_equipment_type:machine.equipment_type,discovered_match_type:machine.match_type,discovered_match_reason:machine.match_reason,discovered_evidence:machine.evidence,discovered_source_urls:machine.source_urls,model:{model_name:machine.model},manufacturer:{name:machine.manufacturer},variant:{variant_name:"AI web match · unverified"}};
+  if(state.demo){state.machines.unshift(record);state.pendingWebMachine=null;closeModal();toast("Web-identified mower added to Garage");return render()}
+  if(!navigator.onLine)return toast("Connect to the internet to add a web-identified machine.");
+  try{
+    const {error}=await state.client.schema("garage").rpc("create_web_discovered_machine",{
+      p_machine_id:record.id,p_garage_id:state.garage.id,
+      p_discovered_manufacturer:machine.manufacturer,p_discovered_model:machine.model,
+      p_discovered_equipment_type:machine.equipment_type||null,p_discovered_match_type:machine.match_type,
+      p_discovered_match_reason:machine.match_reason||null,p_discovered_evidence:machine.evidence||null,
+      p_discovered_source_urls:machine.source_urls,p_nickname:record.nickname,p_serial_number:record.serial_number,
+      p_asset_number:record.asset_number,p_current_engine_hours:engineHours,p_current_reel_hours:reelHours,
+      p_notes:val("#web-machine-notes")||null
+    });
+    if(error)throw error;
+    state.pendingWebMachine=null;closeModal();await loadMachines();toast("Web-identified mower added to Garage");render();
+  }catch(error){toast(error.message||"Could not add this mower")}
 }
 function shell(c){
   const connectionLabel=state.demo?"Demo mode":state.offline?(state.outboxCount?"Offline · "+state.outboxCount+" saved":"Offline"):connected()?"Connected":"Connect";
@@ -259,7 +289,7 @@ function actionIcon(type){
 function card(m){
   const n=m.model?.model_name||"Machine",v=m.variant?.variant_name||"Catalogue variant";
   const status=statusLabel(m.status);
-  return "<article class='card machine-card' data-action='open' data-id='"+esc(m.id)+"' tabindex='0' role='button' aria-label='Open "+esc(m.nickname||n)+"'><div class='machine-visual'><div class='glyph'>"+machineIcon()+"</div></div><div class='machine-name'>"+esc(m.nickname||n)+"</div><div class='machine-sub'>"+esc(m.manufacturer?.name||"Manufacturer")+" · "+esc(v)+"</div><div class='machine-meta'><span class='badge "+statusClass(m.status)+"'>"+esc(status)+"</span><span class='tiny'>"+(m.current_engine_hours!=null?esc(m.current_engine_hours)+" h":"No hours")+"</span></div></article>"
+  return "<article class='card machine-card' data-action='open' data-id='"+esc(m.id)+"' tabindex='0' role='button' aria-label='Open "+esc(m.nickname||n)+"'><div class='machine-visual'><div class='glyph'>"+machineIcon()+"</div></div><div class='machine-name'>"+esc(m.nickname||n)+"</div><div class='machine-sub'>"+esc(m.manufacturer?.name||"Manufacturer")+" · "+esc(v)+"</div><div class='machine-meta'><span class='badge "+statusClass(m.status)+"'>"+(m.discovered_model?"MODEL UNVERIFIED":esc(status))+"</span><span class='tiny'>"+(m.current_engine_hours!=null?esc(m.current_engine_hours)+" h":"No hours")+"</span></div></article>"
 }
 function renderToday(){
   const due=(state.dashboardDue||[]).filter(x=>x.service_status==="due");
@@ -410,18 +440,19 @@ function renderGarage(){
   const attention=due.filter(x=>x.service_status==="due").length;
   const historyUnknown=due.filter(x=>x.service_status==="history_unknown").length;
   const outOfService=list.filter(m=>m.status==="out_of_service").length;
+  const modelUnverified=list.filter(m=>!m.machine_variant_id&&m.discovered_model).length;
   const active=list.length-outOfService;
   const totalHours=list.reduce((sum,m)=>sum+(Number(m.current_engine_hours)||0),0);
   const lead=list[0];
   const leadDue=due.some(x=>x.machine_id===lead?.id&&x.service_status==="due");
   const leadHistoryUnknown=due.some(x=>x.machine_id===lead?.id&&x.service_status==="history_unknown");
-  const leadReadiness=lead?.status==="out_of_service"?"OUT OF SERVICE":lead?.status==="retired"?"RETIRED":lead?.status==="service_due"||leadDue?"SERVICE DUE":leadHistoryUnknown?"CHECK SERVICE HISTORY":lead?.status==="in_service"?"IN SERVICE":"READY FOR THE FIELD";
+  const leadReadiness=lead?.status==="out_of_service"?"OUT OF SERVICE":lead?.status==="retired"?"RETIRED":lead?.status==="service_due"||leadDue?"SERVICE DUE":leadHistoryUnknown?"CHECK SERVICE HISTORY":lead?.discovered_model&&!lead.machine_variant_id?"MODEL UNVERIFIED":lead?.status==="in_service"?"IN SERVICE":"READY FOR THE FIELD";
   const leadCanMow=["ready","in_service"].includes(lead?.status);
   const leadMowAction=leadCanMow?"<button class='garage-action-primary' data-action='garage-mow' data-id='"+esc(lead.id)+"'><span class='mow-icon'>↗</span><span>Start mowing</span></button>":"<button class='garage-action-primary' disabled aria-label='Mowing unavailable while machine is "+esc(leadReadiness.toLowerCase())+"'><span class='mow-icon'>↗</span><span>Unavailable</span></button>";
   const leadHours=lead?.current_engine_hours!=null?Number(lead.current_engine_hours):null;
   const leadModel=lead?.model?.model_name||lead?.variant?.variant_name||"Machine";
   const leadName=lead?.nickname||leadModel;
-  const leadIdentity=[lead?.manufacturer?.name,lead?.variant?.variant_name||leadModel].filter(Boolean).join(" · ");
+  const leadIdentity=[lead?.manufacturer?.name,lead?.discovered_model?"AI WEB MATCH · UNVERIFIED":lead?.variant?.variant_name||leadModel].filter(Boolean).join(" · ");
   const isJacobsenLF3800=/jacobsen/i.test(lead?.manufacturer?.name||"")&&/lf\s*3800/i.test(leadModel+" "+(lead?.variant?.variant_name||""));
 
   if(!list.length){
@@ -432,12 +463,14 @@ function renderGarage(){
   const attentionCopy=[
     outOfService?outOfService+" unavailable":"",
     attention?attention+" service due":"",
-    historyUnknown?historyUnknown+" history unknown":""
+    historyUnknown?historyUnknown+" history unknown":"",
+    modelUnverified?modelUnverified+" model unverified":""
   ].filter(Boolean).join(" · ")||"All machines ready";
   const shortAttentionCopy=[
     outOfService?outOfService+" off":"",
     attention?attention+" due":"",
-    historyUnknown?historyUnknown+" check":""
+    historyUnknown?historyUnknown+" check":"",
+    modelUnverified?modelUnverified+" verify":""
   ].filter(Boolean).join(" · ")||"Ready";
 
   mount(
@@ -456,17 +489,17 @@ function renderGarage(){
             "<div class='garage-hero-actions'><div class='garage-hours'><strong>"+(leadHours!=null?leadHours.toLocaleString():"—")+"</strong><span>ENGINE HOURS</span></div>"+leadMowAction+"<button class='garage-action-secondary' data-action='open' data-id='"+esc(lead.id)+"'>Machine details <span>↗</span></button></div>"+
           "</div>"+
         "</div>"+
-        "<div class='garage-photo-note'>GARAGE SERIES <span>01 / VISUAL CONCEPT</span></div>"+
+        "<div class='garage-photo-note'>GARAGE SERIES <span>"+(lead?.discovered_model?"AI WEB MATCH · UNVERIFIED":"01 / VISUAL CONCEPT")+"</span></div>"+
       "</section>"+
       "<section class='garage-summary'>"+
         "<div><span>In your Garage</span><strong>"+String(list.length).padStart(2,"0")+"</strong><small>machines</small></div>"+
         "<div><span>Ready to work</span><strong>"+String(active).padStart(2,"0")+"</strong><small>available now</small></div>"+
         "<div><span>Total engine time</span><strong>"+(totalHours?Math.round(totalHours).toLocaleString():"—")+"</strong><small>hours recorded</small></div>"+
-        "<div class='"+((historyUnknown||attention)?"has-warning":"")+"'><span>Service status</span><strong>"+(attention?String(attention).padStart(2,"0"):historyUnknown?"Check":"Clear")+"</strong><small>"+(historyUnknown?historyUnknown+" history unknown":attention?"items due":"all machines up to date")+"</small></div>"+
+        "<div class='"+((historyUnknown||attention||modelUnverified)?"has-warning":"")+"'><span>Service status</span><strong>"+(attention?String(attention).padStart(2,"0"):historyUnknown||modelUnverified?"Check":"Clear")+"</strong><small>"+(modelUnverified?modelUnverified+" model unverified":historyUnknown?historyUnknown+" history unknown":attention?"items due":"all machines up to date")+"</small></div>"+
       "</section>"+
       (list.length>1?"<section class='garage-collection'><div class='garage-section-heading'><div><span class='garage-kicker'>Equipment</span><h2>The Garage</h2></div><span>"+list.length+" assets</span></div><div class='garage-machine-grid'>"+list.slice(1).map(m=>{
         const hrs=m.current_engine_hours!=null?Number(m.current_engine_hours).toLocaleString()+" h":"Hours not recorded";
-        return "<article class='garage-machine-tile' data-action='open' data-id='"+esc(m.id)+"'><div class='garage-tile-photo' data-garage-photo='"+esc(m.id)+"'><div class='garage-photo-placeholder'>"+machineIcon()+"</div></div><div class='garage-tile-overlay'></div><div class='garage-tile-content'><span>"+esc(m.manufacturer?.name||"Machine")+"</span><h3>"+esc(m.nickname||m.model?.model_name||"Machine")+"</h3><small>"+esc(statusLabel(m.status))+" · "+hrs+"</small></div></article>";
+        return "<article class='garage-machine-tile' data-action='open' data-id='"+esc(m.id)+"'><div class='garage-tile-photo' data-garage-photo='"+esc(m.id)+"'><div class='garage-photo-placeholder'>"+machineIcon()+"</div></div><div class='garage-tile-overlay'></div><div class='garage-tile-content'><span>"+esc(m.manufacturer?.name||"Machine")+"</span><h3>"+esc(m.nickname||m.model?.model_name||"Machine")+"</h3><small>"+(m.discovered_model?"MODEL UNVERIFIED":esc(statusLabel(m.status)))+" · "+hrs+"</small></div></article>";
       }).join("")+"</div></section>":"")+
       "<section class='garage-quick'><div class='garage-section-heading'><div><span class='garage-kicker'>Keep things moving</span><h2>Workshop</h2></div><span>FIELD TOOLS</span></div><div class='garage-quick-links'><button data-action='quick-hours'><i>◷</i><span><b>Log hours</b><small>Update a machine meter</small></span><em>↗</em></button><button data-action='quick-service'><i>⌁</i><span><b>Record service</b><small>Keep maintenance current</small></span><em>↗</em></button><button data-action='quick-fault'><i>＋</i><span><b>Report a problem</b><small>Flag an issue for the team</small></span><em>↗</em></button></div></section>"+
     "</section>"
@@ -492,6 +525,7 @@ async function loadGaragePhotos(machines){
 function renderDetail(){
   const m=state.selected;
   const pending=readOutbox().filter(x=>x.payload?.machineId===m.id).length;
+  const webIdentityNote=m.discovered_model?"<div class='web-identity-notice'><div><b>AI web match · not catalogue verified</b><span>Saved from a public product source. REELMOW has not verified its identity or specifications.</span></div><p>"+esc(m.discovered_match_reason||"")+" "+esc(m.discovered_evidence||"")+"</p><div>"+(m.discovered_source_urls||[]).map((url,i)=>"<a href='"+esc(url)+"' target='_blank' rel='noopener noreferrer'>Source "+(i+1)+" ↗</a>").join("")+"</div><small>No model-specific service schedule or verified specifications are attached yet.</small></div>":"";
   mount("<div class='machine-page'>"+
     "<div class='machine-back'><button class='back' data-action='back'>← Garage</button></div>"+
     "<section class='machine-hero-compact'>"+
@@ -499,6 +533,7 @@ function renderDetail(){
       "<div class='machine-primary-actions'><button class='btn' data-action='machine-mow'>Mow</button><button class='btn secondary' data-action='hours'>Hours</button><button class='btn secondary' data-action='service'>Service</button><button class='btn secondary' data-action='fault'>Problem</button></div>"+
     "</section>"+
     (pending?"<div class='note compact-note'><b>"+pending+" saved change"+(pending===1?"":"s")+" pending sync.</b></div>":"")+
+    webIdentityNote+
     "<section class='machine-glance'>"+
       "<div class='glance-metric'><strong>"+(m.current_engine_hours??"—")+"</strong><small>Engine hours</small></div>"+
       "<div class='glance-metric'><strong>"+(m.current_reel_hours??"—")+"</strong><small>Reel hours</small></div>"+
@@ -509,7 +544,7 @@ function renderDetail(){
       "<details open><summary><span>Problems</span><span class='disclosure-meta'>Active issues & repairs</span></summary><div class='disclosure-body'><div class='actions disclosure-action'><button class='btn secondary small' data-action='fault'>Report problem</button></div><div id='machine-faults'><div class='loading'><div class='spinner'></div>Loading fault history…</div></div></div></details>"+
       "<details><summary><span>Service history</span><span class='disclosure-meta'>Completed maintenance</span></summary><div class='disclosure-body'><div id='service-history'><div class='loading'><div class='spinner'></div>Loading service history…</div></div></div></details>"+
       "<details><summary><span>Machine details</span><span class='disclosure-meta'>Identity & ownership</span></summary><div class='disclosure-body'><div class='detail-facts'><div><small>Serial number</small><strong>"+esc(m.serial_number||"Not recorded")+"</strong></div><div><small>Asset number</small><strong>"+esc(m.asset_number||"Not recorded")+"</strong></div><div><small>Purchase date</small><strong>"+esc(m.purchase_date||"Not recorded")+"</strong></div></div><button class='btn secondary small' data-action='edit'>Edit machine</button></div></details>"+
-      "<details><summary><span>Specifications</span><span class='disclosure-meta'>Verified catalogue data</span></summary><div class='disclosure-body'><div id='specs'><div class='loading'><div class='spinner'></div>Loading verified specifications…</div></div></div></details>"+
+      "<details><summary><span>Specifications</span><span class='disclosure-meta'>"+(m.discovered_model?"Not catalogue verified":"Verified catalogue data")+"</span></summary><div class='disclosure-body'><div id='specs'><div class='loading'><div class='spinner'></div>Loading verified specifications…</div></div></div></details>"+
       "<details><summary><span>Evidence</span><span class='disclosure-meta'>Photos & documents</span></summary><div class='disclosure-body'><div class='evidence-actions'><button class='btn secondary small' data-action='photo-upload'>Add photo</button><button class='btn secondary small' data-action='document-upload'>Add document</button></div><div class='evidence-sub'><div class='eyebrow'>Photos</div><div id='machine-photos'><div class='loading'><div class='spinner'></div>Loading photos…</div></div></div><div class='evidence-sub'><div class='eyebrow'>Documents</div><div id='machine-documents'><div class='loading'><div class='spinner'></div>Loading documents…</div></div></div></div></details>"+
     "</div>"+
   "</div>");
@@ -586,7 +621,8 @@ function specsHtml(){
   return "<div class='spec-grid'>"+state.specs.map(s=>"<div class='spec'><div class='v'>"+esc(s.value_text??s.value_number??"—")+(s.unit?" "+esc(s.unit):"")+"</div><div class='k'>"+esc(s.label)+"</div></div>").join("")+"</div>"
 }
 async function loadSpecs(m){
-  if(state.demo){state.specs=[{label:"Cutting width",value_number:2.54,unit:"m"},{label:"Number of reels",value_number:5,unit:"count"},{label:"Reel diameter",value_number:178,unit:"mm"},{label:"Reel width",value_number:559,unit:"mm"},{label:"Minimum height of cut",value_number:9.5,unit:"mm"},{label:"Maximum height of cut",value_number:29,unit:"mm"},{label:"Reel blades",value_text:"9 or 11"},{label:"Fuel",value_text:"Diesel"},{label:"Engine",value_text:"Kubota"}]}
+  if(m.discovered_model&&!m.machine_variant_id){state.specs=[]}
+  else if(state.demo){state.specs=[{label:"Cutting width",value_number:2.54,unit:"m"},{label:"Number of reels",value_number:5,unit:"count"},{label:"Reel diameter",value_number:178,unit:"mm"},{label:"Reel width",value_number:559,unit:"mm"},{label:"Minimum height of cut",value_number:9.5,unit:"mm"},{label:"Maximum height of cut",value_number:29,unit:"mm"},{label:"Reel blades",value_text:"9 or 11"},{label:"Fuel",value_text:"Diesel"},{label:"Engine",value_text:"Kubota"}]}
   else{const {data,error}=await state.client.schema("catalogue").from("facts").select("value_text,value_number,unit,spec_definition_id").eq("machine_model_id",m.model.id).eq("status","active");if(error)return toast(error.message);const ids=(data||[]).map(x=>x.spec_definition_id);const {data:d,error:de}=ids.length?await state.client.schema("catalogue").from("spec_definitions").select("id,label").in("id",ids):{data:[]};if(de)return toast(de.message);const map=new Map((d||[]).map(x=>[x.id,x.label]));state.specs=(data||[]).map(x=>({...x,label:map.get(x.spec_definition_id)||"Specification"}))}
   const box=document.querySelector("#specs");if(box)box.innerHTML=state.specs.length?specsHtml():"<p class='tiny'>No verified specifications available.</p>"
 }
@@ -601,7 +637,7 @@ function photosHtml(){
 async function loadEvidence(m){
   state.machineDocuments=[];state.machinePhotos=[];
   if(state.demo){
-    state.machineDocuments=[{id:"demo-manual",title:"Jacobsen LF3800 Operator Manual",document_type:"operator_manual",source:"manufacturer"}];
+    state.machineDocuments=m.discovered_model?[]:[{id:"demo-manual",title:"Jacobsen LF3800 Operator Manual",document_type:"operator_manual",source:"manufacturer"}];
     state.machinePhotos=[];
   }else{
     const [d,p]=await Promise.all([
@@ -665,7 +701,7 @@ async function openDocument(id){
   window.open(data.signedUrl,"_blank","noopener,noreferrer")
 }
 function serviceDueHtml(){
-  if(!state.serviceDue.length)return "<div class='next-empty'>No published service schedule.</div>";
+  if(!state.serviceDue.length)return state.selected?.discovered_model?"<div class='next-empty'>No model-specific schedule yet. Verify this mower against its plate or add an exact catalogue match.</div>":"<div class='next-empty'>No published service schedule.</div>";
   const ordered=[...state.serviceDue].sort((a,b)=>{
     const rank=x=>x.service_status==="due"?0:x.service_status==="history_unknown"?1:2;
     return rank(a)-rank(b);
@@ -697,8 +733,8 @@ function serviceHistoryHtml(){
 }
 async function loadServiceData(m){
   if(state.demo){
-    state.serviceDue=demoServiceDue(m.id);
-    state.serviceRecords=[{task_name:"Engine oil change",serviced_at:"2026-08-14T10:00:00Z",engine_hours:1180,cost:94.5,notes:"Oil and filter replaced."}];
+    state.serviceDue=m.discovered_model&&!m.machine_variant_id?[]:demoServiceDue(m.id);
+    state.serviceRecords=m.discovered_model&&!m.machine_variant_id?[]:[{task_name:"Engine oil change",serviced_at:"2026-08-14T10:00:00Z",engine_hours:1180,cost:94.5,notes:"Oil and filter replaced."}];
   }else{
     const [due,rec]=await Promise.all([
       state.client.schema("garage").from("machine_service_due").select("*").eq("machine_id",m.id).order("service_status").order("task_name"),
@@ -715,7 +751,7 @@ async function loadServiceData(m){
   }
   const dueBox=document.querySelector("#service-due");if(dueBox)dueBox.innerHTML=serviceDueHtml();
   const hist=document.querySelector("#service-history");if(hist)hist.innerHTML=serviceHistoryHtml();
-  const dueCount=document.querySelector("#machine-due-count");if(dueCount){const active=state.serviceDue.filter(x=>x.service_status==="due").length;const unknown=state.serviceDue.filter(x=>x.service_status==="history_unknown").length;dueCount.textContent=active?active+" due":unknown?unknown+" unknown":"Up to date";}
+  const dueCount=document.querySelector("#machine-due-count");if(dueCount){const active=state.serviceDue.filter(x=>x.service_status==="due").length;const unknown=state.serviceDue.filter(x=>x.service_status==="history_unknown").length;dueCount.textContent=m.discovered_model&&!m.machine_variant_id?"No model plan":active?active+" due":unknown?unknown+" unknown":"Up to date";}
 }
 
 function demoServiceDue(machineId){
@@ -1074,6 +1110,7 @@ document.addEventListener("click",e=>{
     document.querySelectorAll(".discovery-tab").forEach(b=>b.classList.toggle("active",b.dataset.action==="catalogue-search-tab"));
     const q=document.querySelector("#q");if(q&&query){q.value=query;search(query)}return;
   }
+  if(x==="add-web-machine"){return addWebMatchedMachine(state.webResults[Number(a.dataset.index)])}
   if(x==="select"){const r=state.catalogueResults.find(v=>v.variant_id===a.dataset.id);if(r)machineModal(r);return}
   if(x==="accept-identified"){
     const pending=state.pendingIdentification,candidates=pending?.candidates||[],r=candidates[Number(a.dataset.index)];

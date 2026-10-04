@@ -1,4 +1,4 @@
-const VERSION="20261004-machine-search-1";
+const VERSION="20261004-machine-search-add-1";
 const CACHE="reelmow-shell-"+VERSION;
 const ASSETS=["./","./index.html","./styles.css","./app.js","./manifest.webmanifest","./icon.svg","./assets/garage-hero-concept.jpg"];
 

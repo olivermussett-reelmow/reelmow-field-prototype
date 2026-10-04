@@ -1,5 +1,5 @@
 begin;
-select extensions.plan(18);
+select extensions.plan(20);
 select extensions.has_schema('catalogue','catalogue schema');
 select extensions.has_schema('garage','garage schema');
 select extensions.has_schema('ingestion','ingestion schema');
@@ -14,6 +14,8 @@ select extensions.has_table('garage','machine_hours_log','hours table');
 select extensions.has_table('garage','machine_service_records','service table');
 select extensions.has_table('garage','machine_documents','documents table');
 select extensions.has_table('garage','machine_photos','photos table');
+select extensions.ok((select count(*)=7 from information_schema.columns where table_schema='garage' and table_name='machines' and column_name in ('discovered_manufacturer','discovered_model','discovered_equipment_type','discovered_match_type','discovered_match_reason','discovered_evidence','discovered_source_urls')),'web-discovered machine identity and source fields');
+select extensions.ok(exists(select 1 from pg_proc where oid='garage.create_web_discovered_machine(uuid,uuid,text,text,text,text,text,text,jsonb,text,text,text,numeric,numeric,text)'::regprocedure),'Garage can add a sourced web-discovered machine');
 select extensions.col_is_pk('garage','machines','id','machines primary key');
 select extensions.col_is_pk('catalogue','machine_variants','id','variants primary key');
 select extensions.ok(not exists(select 1 from catalogue.facts where ((machine_model_id is null)::int+(machine_variant_id is null)::int)<>1),'every catalogue fact has exactly one model/variant scope');

@@ -16,6 +16,7 @@ const webResearch = fs.existsSync("supabase/functions/discover-grounds-machines/
 
 const mustContain = [
   ["Garage machine creation RPC", 'rpc("create_machine"'],
+  ["Sourced web-match machine creation RPC", 'rpc("create_web_discovered_machine"'],
   ["Garage machine profile RPC", 'rpc("update_machine_profile"'],
   ["Catalogue identification matcher", "matchPlateIdentification"],
   ["Offline hours sync", 'rpc("sync_record_machine_hours"'],
@@ -45,6 +46,7 @@ if (!index.includes("app.js")) failures.push("index.html does not load app.js");
 if (!sw.includes('self.addEventListener("fetch"')) failures.push("Service worker fetch handler missing");
 if (!app.includes('functions.invoke("discover-grounds-machines"')) failures.push("AI machine matching is not connected to the Add Machine flow");
 if (!app.includes("body:{query}") || !webResearch.includes('type:"web_search"') || !webResearch.includes("match_type")) failures.push("AI machine matching must search the user's query and return ranked match types");
+if (!app.includes("add-web-machine") || !app.includes("AI web match · not catalogue verified")) failures.push("AI web matches must offer an add flow that labels unverified identity");
 if (!webResearch.includes('supabase.auth.getUser()')) failures.push("AI machine matching must verify the signed-in user");
 if (!webResearch.includes('sources.has') && !webResearch.includes('sources.get')) failures.push("UK web discovery must attach results to cited source URLs");
 

@@ -3,6 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders={"Access-Control-Allow-Origin":"*","Access-Control-Allow-Headers":"authorization, x-client-info, apikey, content-type","Access-Control-Allow-Methods":"POST, OPTIONS"};
 const nullableString={anyOf:[{type:"string"},{type:"null"}]};
+const matchRank:Record<string,number>={exact_match:0,close_match:1,related_option:2};
 const outputSchema={
   type:"object",additionalProperties:false,
   properties:{
@@ -57,9 +58,9 @@ Deno.serve(async req=>{
     }
     const machines=(parsed.machines||[]).slice(0,5).map((machine:Record<string,unknown>)=>{
       const cited=(Array.isArray(machine.source_urls)?machine.source_urls:[]).map((value)=>typeof value==="string"?sources.get(normalizeUrl(value))?.url:null).filter((value):value is string=>!!value);
-      return {...machine,source_urls:[...new Set(cited)]};
+      return {...machine,source_urls:[...new Set(cited)].slice(0,5)};
     }).filter((machine:Record<string,unknown>)=>Array.isArray(machine.source_urls)&&machine.source_urls.length>0&&typeof machine.manufacturer==="string"&&typeof machine.model==="string"&&typeof machine.match_reason==="string")
-      .sort((a:Record<string,unknown>,b:Record<string,unknown>)=>({exact_match:0,close_match:1,related_option:2}[String(a.match_type) as "exact_match"|"close_match"|"related_option"]??3)-({exact_match:0,close_match:1,related_option:2}[String(b.match_type) as "exact_match"|"close_match"|"related_option"]??3));
+      .sort((a:Record<string,unknown>,b:Record<string,unknown>)=>(matchRank[String(a.match_type)]??3)-(matchRank[String(b.match_type)]??3));
     return json({machines,sources:[...sources.values()].slice(0,16),caveat:typeof parsed.caveat==="string"?parsed.caveat:"Public sources do not provide a complete UK market-share ranking."});
   }catch(error){
     console.error("Grounds web research failed",error?.message||error);
