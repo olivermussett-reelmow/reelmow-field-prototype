@@ -11,6 +11,8 @@ for (const file of required) {
 const app = fs.existsSync("app.js") ? fs.readFileSync("app.js", "utf8") : "";
 const sw = fs.existsSync("sw.js") ? fs.readFileSync("sw.js", "utf8") : "";
 const index = fs.existsSync("index.html") ? fs.readFileSync("index.html", "utf8") : "";
+const webResearch = fs.existsSync("supabase/functions/discover-grounds-machines/index.ts")
+  ? fs.readFileSync("supabase/functions/discover-grounds-machines/index.ts", "utf8") : "";
 
 const mustContain = [
   ["Garage machine creation RPC", 'rpc("create_machine"'],
@@ -41,6 +43,9 @@ for (const pattern of forbiddenDirectGarageWrites) {
 if (!index.includes("reelmow.config.js")) failures.push("index.html does not load reelmow.config.js");
 if (!index.includes("app.js")) failures.push("index.html does not load app.js");
 if (!sw.includes('self.addEventListener("fetch"')) failures.push("Service worker fetch handler missing");
+if (!app.includes('functions.invoke("discover-grounds-machines"')) failures.push("UK equipment web discovery is not connected to the Add Machine flow");
+if (!webResearch.includes('supabase.auth.getUser()') || !webResearch.includes('type:"web_search"')) failures.push("UK web discovery must verify the signed-in user and use live web search");
+if (!webResearch.includes('sources.has') && !webResearch.includes('sources.get')) failures.push("UK web discovery must attach results to cited source URLs");
 
 const actionRefs = new Set([...app.matchAll(/data-action=['"]([^'"]+)['"]/g)].map(m => m[1]));
 const handlerRefs = new Set([...app.matchAll(/if\(x===["']([^"']+)["']\)/g)].map(m => m[1]));

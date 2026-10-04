@@ -15,7 +15,7 @@ const demoCatalogue=[
   {model_id:"demo-allett-shaver",manufacturer_name:"Allett",model_name:"Shaver",variant_id:"demo-allett-shaver-24",variant_name:"Shaver 24",machine_type:"Cylinder Mower",rank:.97},
   {model_id:"demo-atco-royale",manufacturer_name:"Atco",model_name:"Royale 24",variant_id:"demo-atco-royale-ic",variant_name:"Royale 24 I/C - F016310542",machine_type:"Cylinder Mower",rank:.96}
 ];
-const state={client:null,user:null,role:null,org:null,garage:null,orgs:[],garages:[],workspaceNeedsSelection:false,offline:false,syncing:false,outboxCount:0,machines:[],selected:null,specs:[],serviceDue:[],serviceRecords:[],hoursLog:[],catalogueResults:[],dashboardDue:[],openFaults:[],machineFaults:[],activity:[],mow:{active:false,paused:false,sessionId:null,machineId:null,watchId:null,startedAt:null,lastPoint:null,trackPoints:[],distanceM:0,points:0,accuracyM:null,speedMps:null,headingDeg:null,pattern:"stripe",targetSpeedKph:null},loading:false,error:"",pendingPlateFile:null,pendingIdentification:null,quickAction:null,view:localStorage.getItem("reelmow.view.v1")||"today",demo:localStorage.getItem(DEMO_KEY)==="true" && !(window.REELMOW_CONFIG?.url && window.REELMOW_CONFIG?.key)};
+const state={client:null,user:null,role:null,org:null,garage:null,orgs:[],garages:[],workspaceNeedsSelection:false,offline:false,syncing:false,outboxCount:0,machines:[],selected:null,specs:[],serviceDue:[],serviceRecords:[],hoursLog:[],catalogueResults:[],webResults:[],webCitations:[],webSport:"golf",webResearchCaveat:"",dashboardDue:[],openFaults:[],machineFaults:[],activity:[],mow:{active:false,paused:false,sessionId:null,machineId:null,watchId:null,startedAt:null,lastPoint:null,trackPoints:[],distanceM:0,points:0,accuracyM:null,speedMps:null,headingDeg:null,pattern:"stripe",targetSpeedKph:null},loading:false,webResearching:false,error:"",pendingPlateFile:null,pendingIdentification:null,quickAction:null,view:localStorage.getItem("reelmow.view.v1")||"garage",demo:localStorage.getItem(DEMO_KEY)==="true" && !(window.REELMOW_CONFIG?.url && window.REELMOW_CONFIG?.key)};
 
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const val=s=>document.querySelector(s)?.value.trim()||"";
@@ -175,15 +175,37 @@ async function search(q){
     else{const {data,error}=await state.client.schema("catalogue").rpc("search_machines",{search_text:q.trim(),result_limit:12});if(error)throw error;state.catalogueResults=data||[]}
     box.innerHTML=state.catalogueResults.length
       ?state.catalogueResults.map(r=>"<button class='result' data-action='select' data-id='"+esc(r.variant_id)+"'><div><div class='result-name'>"+esc(r.manufacturer_name)+" "+esc(r.model_name)+"</div><div class='result-meta'>"+esc(r.variant_name||"Model")+" · "+esc(r.machine_type||"Machine")+"</div></div><span class='arrow'>›</span></button>").join("")
-      :"<div class='empty-mini'><div class='tiny'><b>Nothing found in the catalogue.</b></div><div class='tiny' style='margin-top:5px'>If the machine is sitting in front of you, scan its model plate and REELMOW will identify the text so we can search again.</div><button class='btn secondary small' style='margin-top:12px' data-action='unknown-machine'>Scan model plate</button></div>";
+      :"<div class='empty-mini'><div class='tiny'><b>Nothing found in the catalogue.</b></div><div class='tiny' style='margin-top:5px'>Explore UK web research, or scan the model plate below to check the exact machine.</div></div>";
   }catch(e){box.innerHTML="<div class='error'>"+esc(e.message||"Search failed")+"</div>"}finally{state.loading=false}
+}
+const researchExamples={
+  golf:{caveat:"A reported brand footprint is a signal, not an independent market-share ranking.",sources:[{title:"Golf Monthly · UK golf-course robot mowers",url:"https://www.golfmonthly.com/features/golf-monthly/how-robot-mowers-are-transforming-golf-courses"},{title:"Golf Monthly · AIG Women’s Open",url:"https://www.golfmonthly.com/news/robot-mowers-aig-womens-open-first-time-major"}],machines:[{manufacturer:"Husqvarna",model:"CEORA / Automower",equipment_type:"Robotic course mower",sports:["Golf"],usage_evidence:"club_use_example",evidence:"Golf Monthly reports about 150 UK and Irish golf clubs using Husqvarna robotic mowers. Fifteen CEORA and Automower units were used at the 2025 AIG Women’s Open.",source_urls:["https://www.golfmonthly.com/features/golf-monthly/how-robot-mowers-are-transforming-golf-courses","https://www.golfmonthly.com/news/robot-mowers-aig-womens-open-first-time-major"]}]},
+  cricket:{caveat:"These are equipment needs and guidance, not a model-by-model sales or installed-base ranking.",sources:[{title:"GMA / ECB · Pitch mower guidance",url:"https://toolkit.thegma.org.uk/cricket/monthly-maintenance/cricket-in-season/preparing-pitches-for-play/phase-1-initial-phase/define-your-pitch-and-provide-the-initial-cut/"},{title:"GMA · Rolling cricket pitches",url:"https://toolkit.thegma.org.uk/detail/rolling-cricket-pitches/"}],machines:[{manufacturer:"Equipment category",model:"Cricket pitch mower",equipment_type:"Fine-turf cylinder mower",sports:["Cricket"],usage_evidence:"category_guidance",evidence:"GMA and ECB guidance describes close-cut pitch preparation and recommends a mower no wider than 22 inches, ideally with eight or more blades.",source_urls:["https://toolkit.thegma.org.uk/cricket/monthly-maintenance/cricket-in-season/preparing-pitches-for-play/phase-1-initial-phase/define-your-pitch-and-provide-the-initial-cut/"]},{manufacturer:"Equipment category",model:"Motorised tandem roller",equipment_type:"Cricket pitch roller",sports:["Cricket"],usage_evidence:"category_guidance",evidence:"GMA calls the roller an iconic cricket-grounds machine and describes a commonly considered modern specification: twin drum, 3–4 ft wide and 1.5–3 tonnes.",source_urls:["https://toolkit.thegma.org.uk/detail/rolling-cricket-pitches/"]}]},
+  football:{caveat:"GMA identifies suitable equipment types; this does not establish which brands or models are most common.",sources:[{title:"GMA · Basic grounds equipment",url:"https://toolkit.thegma.org.uk/detail/what-basic-equipment-is-required/"},{title:"GMA · Football tasks and equipment",url:"https://toolkit.thegma.org.uk/football/football-tasks-equipment/"},{title:"GMA · Line marking equipment",url:"https://toolkit.thegma.org.uk/detail/line-marking-equipment/"}],machines:[{manufacturer:"Equipment category",model:"Ride-on or tractor-mounted mower",equipment_type:"Pitch mower",sports:["Football"],usage_evidence:"category_guidance",evidence:"GMA guidance lists ride-on, trailed, towed or tractor-mounted mowers among desirable additions for football and rugby clubs.",source_urls:["https://toolkit.thegma.org.uk/detail/what-basic-equipment-is-required/","https://toolkit.thegma.org.uk/football/football-tasks-equipment/"]},{manufacturer:"Equipment category",model:"Line marker",equipment_type:"Pitch marking equipment",sports:["Football"],usage_evidence:"category_guidance",evidence:"GMA includes marking machines in basic grounds equipment guidance and publishes dedicated safe-use guidance for line markers.",source_urls:["https://toolkit.thegma.org.uk/detail/what-basic-equipment-is-required/","https://toolkit.thegma.org.uk/detail/line-marking-equipment/"]}]}
+};
+function webResultCard(r){
+  const signal={explicit_prevalence:"Usage evidence",club_use_example:"Club use reported",supplier_claim:"Supplier claim",category_guidance:"Grounds guidance"}[r.usage_evidence]||"Web source";
+  const refs=(r.source_urls||[]).map(u=>state.webCitations.find(c=>c.url===u)).filter(Boolean);
+  return "<article class='web-result'><div class='web-result-top'><span class='web-result-signal'>"+esc(signal)+"</span><span class='web-result-sport'>"+esc((r.sports||[]).join(" · ")||"UK grounds")+"</span></div><div class='web-result-title'>"+esc(r.manufacturer)+" <strong>"+esc(r.model)+"</strong></div><div class='web-result-type'>"+esc(r.equipment_type)+"</div><p>"+esc(r.evidence)+"</p><div class='web-result-sources'>"+(refs.length?refs.map(c=>"<a href='"+esc(c.url)+"' target='_blank' rel='noopener noreferrer'>"+esc(c.title||new URL(c.url).hostname)+" ↗</a>").join(""):"<span>Open source details unavailable</span>")+"</div><button class='web-result-action' data-action='search-web-result' data-query='"+esc([r.manufacturer,r.model].filter(v=>v!=="Equipment category").join(" "))+"'>Check catalogue <span>↗</span></button></article>";
+}
+async function searchGroundsWeb(q){
+  const box=document.querySelector("#web-results");if(!box)return;
+  const query=(q||document.querySelector("#q")?.value||state.webSport).trim();if(query.length<2){box.innerHTML="<p class='tiny'>Enter a machine, task or sport to search public UK grounds sources.</p>";return}
+  state.webResearching=true;box.innerHTML="<div class='loading'><div class='spinner'></div>Searching UK grounds sources…</div>";
+  try{
+    let result;
+    if(state.demo){result=researchExamples[state.webSport]||researchExamples.golf;state.webResults=result.machines;state.webCitations=result.sources;state.webResearchCaveat=result.caveat}
+    else{const {data,error}=await state.client.functions.invoke("discover-grounds-machines",{body:{query,sport:state.webSport}});if(error)throw error;state.webResults=data?.machines||[];state.webCitations=data?.sources||[];state.webResearchCaveat=data?.caveat||""}
+    box.innerHTML=(state.webResults.length?state.webResults.map(webResultCard).join(""):"<div class='empty-mini'><b>No sourced equipment leads found.</b><div class='tiny' style='margin-top:5px'>Try a machine, brand or grounds task.</div></div>")+(state.webResearchCaveat?"<div class='web-research-note'>"+esc(state.webResearchCaveat)+(state.demo?" <span>DEMO RESEARCH</span>":"")+"</div>":"");
+  }catch(e){box.innerHTML="<div class='error'>"+esc(e.message||"Web search is unavailable")+"</div><div class='tiny' style='margin-top:8px'>You can still scan a plate or search the verified catalogue.</div>"}
+  finally{state.webResearching=false}
 }
 function shell(c){
   const connectionLabel=state.demo?"Demo mode":state.offline?(state.outboxCount?"Offline · "+state.outboxCount+" saved":"Offline"):connected()?"Connected":"Connect";
   const connectionClass=state.demo?"demo":state.offline?"offline":connected()?"ok":"";
   const active=state.view||"today";
   const nav=(key,label)=>"<button class='nav-link "+(active===key?"active":"")+"' data-action='"+key+"'>"+label+"</button>";
-  return "<div class='shell'><header class='topbar'><div class='brand'><span class='mark'></span>REEL<span>MOW</span></div><nav class='top-nav'>"+nav("today","Today")+nav("garage","Garage")+nav("catalogue","Catalogue")+"</nav><div class='top-actions'><button class='btn ghost small' data-action='connection'><span class='dot "+connectionClass+"'></span>"+connectionLabel+"</button>"+(state.user?"<div class='avatar'>"+esc(initials(state.user.email))+"</div>":"")+"</div></header><main class='page'>"+c+"</main><nav class='mobile-nav'>"+nav("today","Today")+nav("garage","Garage")+nav("activity","Activity")+nav("profile","Profile")+"</nav><div class='footer'>REELMOW · Field operations, under control.</div></div>"
+  return "<div class='shell'><header class='topbar'><div class='brand'><span class='mark'></span>REEL<span>MOW</span></div><nav class='top-nav'>"+nav("garage","Garage")+nav("today","Today")+nav("catalogue","Catalogue")+"</nav><div class='top-actions'><button class='btn ghost small' data-action='connection'><span class='dot "+connectionClass+"'></span>"+connectionLabel+"</button>"+(state.user?"<div class='avatar'>"+esc(initials(state.user.email))+"</div>":"")+"</div></header><main class='page'>"+c+"</main><nav class='mobile-nav'>"+nav("garage","Garage")+nav("today","Today")+nav("activity","Activity")+nav("profile","Profile")+"</nav><div class='footer'>REELMOW · Field operations, under control.</div></div>"
 }
 function mount(c){app.innerHTML="<div class='app'>"+shell(c)+"</div>"}
 function setView(view){
@@ -392,50 +414,62 @@ function renderGarage(){
   const active=list.length-outOfService;
   const totalHours=list.reduce((sum,m)=>sum+(Number(m.current_engine_hours)||0),0);
   const lead=list[0];
-  const leadStatus=lead?statusLabel(lead.status):"";
+  const leadDue=due.some(x=>x.machine_id===lead?.id&&x.service_status==="due");
+  const leadHistoryUnknown=due.some(x=>x.machine_id===lead?.id&&x.service_status==="history_unknown");
+  const leadReadiness=lead?.status==="out_of_service"?"OUT OF SERVICE":lead?.status==="retired"?"RETIRED":lead?.status==="service_due"||leadDue?"SERVICE DUE":leadHistoryUnknown?"CHECK SERVICE HISTORY":lead?.status==="in_service"?"IN SERVICE":"READY FOR THE FIELD";
+  const leadCanMow=["ready","in_service"].includes(lead?.status);
+  const leadMowAction=leadCanMow?"<button class='garage-action-primary' data-action='garage-mow' data-id='"+esc(lead.id)+"'><span class='mow-icon'>↗</span><span>Start mowing</span></button>":"<button class='garage-action-primary' disabled aria-label='Mowing unavailable while machine is "+esc(leadReadiness.toLowerCase())+"'><span class='mow-icon'>↗</span><span>Unavailable</span></button>";
   const leadHours=lead?.current_engine_hours!=null?Number(lead.current_engine_hours):null;
   const leadModel=lead?.model?.model_name||lead?.variant?.variant_name||"Machine";
   const leadName=lead?.nickname||leadModel;
+  const leadIdentity=[lead?.manufacturer?.name,lead?.variant?.variant_name||leadModel].filter(Boolean).join(" · ");
+  const isJacobsenLF3800=/jacobsen/i.test(lead?.manufacturer?.name||"")&&/lf\s*3800/i.test(leadModel+" "+(lead?.variant?.variant_name||""));
 
   if(!list.length){
-    mount("<section class='garage-empty-page'><div class='garage-kicker'>"+esc(state.demo?"Demo Garage":state.garage?.name||"Garage")+"</div><h1>Your Garage.</h1><p>Build your machinery collection and keep every asset ready for work.</p><button class='garage-primary-action' data-action='add'>Add your first machine <span>→</span></button></section>");
+    mount("<section class='garage-empty-page'><div class='garage-kicker'>"+esc(state.demo?"Demo Garage":state.garage?.name||"Garage")+"</div><h1>The Garage.</h1><p>Every machine, ready for the work ahead.</p><button class='garage-primary-action' data-action='add'>Add your first machine <span>→</span></button></section>");
     return;
   }
 
-  const attentionCopy=outOfService
-    ? outOfService+" machine"+(outOfService===1?"":"s")+" unavailable"
-    : attention
-      ? attention+" service item"+(attention===1?"":"s")+" due"
-      : "Garage ready";
+  const attentionCopy=[
+    outOfService?outOfService+" unavailable":"",
+    attention?attention+" service due":"",
+    historyUnknown?historyUnknown+" history unknown":""
+  ].filter(Boolean).join(" · ")||"All machines ready";
+  const shortAttentionCopy=[
+    outOfService?outOfService+" off":"",
+    attention?attention+" due":"",
+    historyUnknown?historyUnknown+" check":""
+  ].filter(Boolean).join(" · ")||"Ready";
 
   mount(
     "<section class='garage-page'>"+
       "<header class='garage-header'>"+
-        "<div><div class='garage-kicker'>"+esc(state.demo?"Demo Garage":state.garage?.name||"Garage")+"</div><h1>Your Garage.</h1></div>"+
-        "<div class='garage-header-meta'><span class='garage-live-dot'></span><span>"+esc(attentionCopy)+"</span><button class='garage-add-link' data-action='add'>Add machine <span>＋</span></button></div>"+
+        "<div><div class='garage-kicker'>"+esc(state.demo?"DEMO · "+(state.garage?.name||"MAIN GARAGE"):state.garage?.name||"MAIN GARAGE")+"</div><h1>The Garage<span>.</span></h1></div>"+
+        "<div class='garage-header-meta'><span class='garage-status-label "+((outOfService||attention||historyUnknown)?"warning":"")+"' aria-label='"+esc(attentionCopy)+"'><span class='garage-live-dot'></span><span class='garage-status-full'>"+esc(attentionCopy)+"</span><span class='garage-status-short'>"+esc(shortAttentionCopy)+"</span></span><button class='garage-add-link' data-action='add' aria-label='Add machine'><span class='garage-add-icon'>＋</span><span>Add machine</span></button></div>"+
       "</header>"+
-      "<section class='garage-hero' data-action='open' data-id='"+esc(lead.id)+"'>"+
-        "<div class='garage-hero-photo' data-garage-photo='"+esc(lead.id)+"'><div class='garage-photo-placeholder'>"+machineIcon()+"<span>Machine image</span></div></div>"+
+      "<section class='garage-hero' aria-label='Featured machine: "+esc(leadName)+"'>"+
+        "<div class='garage-hero-photo"+(isJacobsenLF3800?" concept-photo":"")+"' data-garage-photo='"+esc(lead.id)+"'>"+(isJacobsenLF3800?"<img src='./assets/garage-hero-concept.jpg' alt='Illustrative five-gang reel mower in a modern machinery garage' fetchpriority='high'>":"<div class='garage-photo-placeholder'>"+machineIcon()+"</div>")+"</div>"+
         "<div class='garage-hero-shade'></div>"+
         "<div class='garage-hero-content'>"+
-          "<div class='garage-hero-top'><span class='garage-eyebrow'>"+esc(lead.manufacturer?.name||"Machine")+" · "+esc(lead.variant?.variant_name||"")+"</span><span class='garage-status-chip "+(lead.status==="out_of_service"?"attention":"")+"'><i></i>"+esc(leadStatus)+"</span></div>"+
+          "<div class='garage-hero-top'><div class='garage-hero-index'><span class='garage-index-mark'>01</span><span class='garage-eyebrow'>"+esc(leadIdentity)+"</span></div><span class='garage-status-chip "+(leadReadiness.startsWith("READY")?"":lead.status==="in_service"?"working":"attention")+"'><i></i>"+esc(leadReadiness)+"</span></div>"+
           "<div class='garage-hero-bottom'>"+
-            "<div><h2>"+esc(leadName)+"</h2><p>"+esc(leadModel)+(leadHours!=null?" · "+leadHours.toLocaleString()+" engine hours":"")+"</p></div>"+
-            "<div class='garage-hero-actions'><button class='garage-action-primary' data-action='garage-mow' data-id='"+esc(lead.id)+"'>Mow <span>→</span></button><button class='garage-action-secondary' data-action='open' data-id='"+esc(lead.id)+"'>Open machine</button></div>"+
+            "<div class='garage-machine-title'><div class='garage-title-overline'>YOUR MACHINE <span>•</span> "+esc(leadReadiness)+"</div><h2>"+esc(leadName)+"</h2><p>"+esc(leadModel)+"</p></div>"+
+            "<div class='garage-hero-actions'><div class='garage-hours'><strong>"+(leadHours!=null?leadHours.toLocaleString():"—")+"</strong><span>ENGINE HOURS</span></div>"+leadMowAction+"<button class='garage-action-secondary' data-action='open' data-id='"+esc(lead.id)+"'>Machine details <span>↗</span></button></div>"+
           "</div>"+
         "</div>"+
+        "<div class='garage-photo-note'>GARAGE SERIES <span>01 / VISUAL CONCEPT</span></div>"+
       "</section>"+
       "<section class='garage-summary'>"+
-        "<div><span>Fleet</span><strong>"+list.length+"</strong><small>machines</small></div>"+
-        "<div><span>Available</span><strong>"+active+"</strong><small>ready for work</small></div>"+
-        "<div><span>Engine time</span><strong>"+(totalHours?Math.round(totalHours).toLocaleString():"—")+"</strong><small>recorded hours</small></div>"+
-        "<div class='"+(historyUnknown?"has-warning":"")+"'><span>Service</span><strong>"+(attention?attention:"Ready")+"</strong><small>"+(historyUnknown?historyUnknown+" history unknown":attention?"items due":"no items due")+"</small></div>"+
+        "<div><span>In your Garage</span><strong>"+String(list.length).padStart(2,"0")+"</strong><small>machines</small></div>"+
+        "<div><span>Ready to work</span><strong>"+String(active).padStart(2,"0")+"</strong><small>available now</small></div>"+
+        "<div><span>Total engine time</span><strong>"+(totalHours?Math.round(totalHours).toLocaleString():"—")+"</strong><small>hours recorded</small></div>"+
+        "<div class='"+((historyUnknown||attention)?"has-warning":"")+"'><span>Service status</span><strong>"+(attention?String(attention).padStart(2,"0"):historyUnknown?"Check":"Clear")+"</strong><small>"+(historyUnknown?historyUnknown+" history unknown":attention?"items due":"all machines up to date")+"</small></div>"+
       "</section>"+
       (list.length>1?"<section class='garage-collection'><div class='garage-section-heading'><div><span class='garage-kicker'>Equipment</span><h2>The Garage</h2></div><span>"+list.length+" assets</span></div><div class='garage-machine-grid'>"+list.slice(1).map(m=>{
         const hrs=m.current_engine_hours!=null?Number(m.current_engine_hours).toLocaleString()+" h":"Hours not recorded";
         return "<article class='garage-machine-tile' data-action='open' data-id='"+esc(m.id)+"'><div class='garage-tile-photo' data-garage-photo='"+esc(m.id)+"'><div class='garage-photo-placeholder'>"+machineIcon()+"</div></div><div class='garage-tile-overlay'></div><div class='garage-tile-content'><span>"+esc(m.manufacturer?.name||"Machine")+"</span><h3>"+esc(m.nickname||m.model?.model_name||"Machine")+"</h3><small>"+esc(statusLabel(m.status))+" · "+hrs+"</small></div></article>";
       }).join("")+"</div></section>":"")+
-      "<section class='garage-quick'><div class='garage-section-heading'><div><span class='garage-kicker'>Workshop</span><h2>Quick access</h2></div></div><div class='garage-quick-links'><button data-action='quick-hours'>Log hours <span>→</span></button><button data-action='quick-service'>Record service <span>→</span></button><button data-action='quick-fault'>Report a problem <span>→</span></button></div></section>"+
+      "<section class='garage-quick'><div class='garage-section-heading'><div><span class='garage-kicker'>Keep things moving</span><h2>Workshop</h2></div><span>FIELD TOOLS</span></div><div class='garage-quick-links'><button data-action='quick-hours'><i>◷</i><span><b>Log hours</b><small>Update a machine meter</small></span><em>↗</em></button><button data-action='quick-service'><i>⌁</i><span><b>Record service</b><small>Keep maintenance current</small></span><em>↗</em></button><button data-action='quick-fault'><i>＋</i><span><b>Report a problem</b><small>Flag an issue for the team</small></span><em>↗</em></button></div></section>"+
     "</section>"
   );
   loadGaragePhotos(list);
@@ -452,7 +486,7 @@ async function loadGaragePhotos(machines){
     const signed=await state.client.storage.from(p.storage_bucket).createSignedUrl(p.storage_path,3600);
     if(signed.error)continue;
     const el=document.querySelector("[data-garage-photo='"+CSS.escape(id)+"']");
-    if(el)el.innerHTML="<img src='"+esc(signed.data.signedUrl)+"' alt='"+esc(p.caption||"Machine photo")+"' loading='eager'>";
+    if(el){el.innerHTML="<img src='"+esc(signed.data.signedUrl)+"' alt='"+esc(p.caption||"Machine photo")+"' loading='eager'>";if(id===machines[0]?.id){const note=document.querySelector(".garage-photo-note span");if(note)note.textContent="01 / MACHINE PHOTO"}}
   }
 }
 
@@ -664,13 +698,7 @@ function serviceHistoryHtml(){
 }
 async function loadServiceData(m){
   if(state.demo){
-    state.serviceDue=[
-      {task_name:"Engine oil change",service_status:"due",hours_remaining:-4.5,source_page:16},
-      {task_name:"Lubricate F1 grease points",service_status:"upcoming",hours_remaining:15.5,source_page:28},
-      {task_name:"Lubricate F2 grease points",service_status:"upcoming",hours_remaining:115.5,source_page:28},
-      {task_name:"Lubricate F3 grease points",service_status:"upcoming",hours_remaining:215.5,source_page:28},
-      {task_name:"Inspect fuel lines and clamps",service_status:"upcoming",hours_remaining:15.5,source_page:17}
-    ];
+    state.serviceDue=demoServiceDue(m.id);
     state.serviceRecords=[{task_name:"Engine oil change",serviced_at:"2026-08-14T10:00:00Z",engine_hours:1180,cost:94.5,notes:"Oil and filter replaced."}];
   }else{
     const [due,rec]=await Promise.all([
@@ -689,6 +717,16 @@ async function loadServiceData(m){
   const dueBox=document.querySelector("#service-due");if(dueBox)dueBox.innerHTML=serviceDueHtml();
   const hist=document.querySelector("#service-history");if(hist)hist.innerHTML=serviceHistoryHtml();
   const dueCount=document.querySelector("#machine-due-count");if(dueCount){const active=state.serviceDue.filter(x=>x.service_status==="due").length;const unknown=state.serviceDue.filter(x=>x.service_status==="history_unknown").length;dueCount.textContent=active?active+" due":unknown?unknown+" unknown":"Up to date";}
+}
+
+function demoServiceDue(machineId){
+  return [
+    {machine_id:machineId,task_name:"Engine oil change",service_status:"due",hours_remaining:-4.5,source_page:16},
+    {machine_id:machineId,task_name:"Lubricate F1 grease points",service_status:"upcoming",hours_remaining:15.5,source_page:28},
+    {machine_id:machineId,task_name:"Lubricate F2 grease points",service_status:"upcoming",hours_remaining:115.5,source_page:28},
+    {machine_id:machineId,task_name:"Lubricate F3 grease points",service_status:"upcoming",hours_remaining:215.5,source_page:28},
+    {machine_id:machineId,task_name:"Inspect fuel lines and clamps",service_status:"upcoming",hours_remaining:15.5,source_page:17}
+  ];
 }
 function hoursModal(){
   const m=state.selected;
@@ -745,8 +783,9 @@ async function saveService(e){
   }catch(x){toast(x.message||"Could not save service record")}
 }
 function addModal(){
-  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Add machine</div><h2>Find it in the catalogue.</h2><p class='tiny'>Search manufacturer, model or variant.</p></div><button class='close' data-action='close'>×</button></div><div class='search-wrap'><span class='search-icon'>⌕</span><input id='q' class='search' placeholder='Search manufacturer or model…'></div><div class='quick-searches'><button class='chip' data-search='LF3800'>Jacobsen LF3800</button><button class='chip' data-search='SC610'>Protea SC610</button><button class='chip' data-search='Shaver 24'>Allett Shaver 24</button><button class='chip' data-search='Royale 24'>ATCO Royale 24</button></div><div id='results' class='result-list'><p class='tiny'>Start typing, or choose a machine above.</p></div><div class='catalogue-help'><b>Can’t find your machine?</b><span>Scan the model plate and use the result to search the catalogue.</span><button class='btn secondary small' data-action='unknown-machine'>Scan plate</button></div></div></div>");
-  const q=document.querySelector("#q");let t;q.addEventListener("input",()=>{clearTimeout(t);t=setTimeout(()=>search(q.value),220)});
+  state.webSport="golf";state.webResults=[];state.webCitations=[];
+  modal("<div class='modal-backdrop'><div class='modal discovery-modal'><div class='modal-head'><div><div class='eyebrow'>Find equipment</div><h2>Search the grounds world.</h2><p class='tiny'>Verified catalogue matches, plus sourced UK grounds research.</p></div><button class='close' data-action='close'>×</button></div><div class='discovery-tabs'><button class='discovery-tab active' data-action='catalogue-search-tab'>Catalogue</button><button class='discovery-tab' data-action='web-search-tab'>UK web research <span>NEW</span></button></div><div class='search-wrap'><span class='search-icon'>⌕</span><input id='q' class='search' placeholder='Search a machine, brand or grounds task…' autocomplete='off'></div><section class='discovery-pane' id='catalogue-pane'><div class='quick-searches'><button class='chip' data-search='LF3800'>Jacobsen LF3800</button><button class='chip' data-search='SC610'>Protea SC610</button><button class='chip' data-search='Shaver 24'>Allett Shaver 24</button><button class='chip' data-search='Royale 24'>ATCO Royale 24</button></div><div id='results' class='result-list'><p class='tiny'>Start typing, or choose a machine above.</p></div><div class='catalogue-help'><b>Have the machine with you?</b><span>Scan its model plate and check the exact catalogue match.</span><button class='btn secondary small' data-action='unknown-machine'>Scan plate</button></div></section><section class='discovery-pane' id='web-pane' hidden><div class='research-intro'><div class='eyebrow'>UK grounds research</div><p>Explore equipment found in public club reports, manufacturer sources and Grounds Management Association guidance.</p></div><div class='sport-filters'><button class='sport-filter active' data-action='web-sport' data-sport='golf'>Golf</button><button class='sport-filter' data-action='web-sport' data-sport='cricket'>Cricket</button><button class='sport-filter' data-action='web-sport' data-sport='football'>Football</button></div><button class='btn research-search-button' data-action='web-search'>"+(state.demo?"Explore UK source examples":"Search UK web now")+" <span>↗</span></button><div id='web-results' class='web-results'><p class='tiny'>Search for a machine or choose a sport to explore sourced examples.</p></div><div class='research-footnote'>Results include source links and identify whether evidence shows actual club use, supplier claims or equipment guidance.</div></section></div></div>");
+  const q=document.querySelector("#q");let t;q.addEventListener("input",()=>{if(document.querySelector("#web-pane")?.hidden){clearTimeout(t);t=setTimeout(()=>search(q.value),220)}});
   document.querySelectorAll("[data-search]").forEach(b=>b.addEventListener("click",()=>{q.value=b.dataset.search;search(q.value)}));
   q.focus()
 }
@@ -976,7 +1015,8 @@ function connectionModal(){
 function loadDemo(){
   state.org={id:"demo-org",name:"Barton Town Cricket Club",slug:"barton-town-cricket-club"};
   state.garage={id:"demo-garage",name:"Main Garage",location_name:"Club Grounds"};
-  if(!state.machines.length)state.machines=[{id:"demo-lf3800",garage_id:"demo-garage",machine_variant_id:demoCatalogue[0].variant_id,serial_number:"DEMO-LF3800",asset_number:"BTCC-001",nickname:"Main Outfield Mower",purchase_date:"2025-03-14",current_engine_hours:1284.5,current_reel_hours:642.2,status:"ready",variant:{variant_name:"LF3800 5-Gang"},model:{model_name:"LF3800"},manufacturer:{name:"Jacobsen"}}]
+  if(!state.machines.length)state.machines=[{id:"demo-lf3800",garage_id:"demo-garage",machine_variant_id:demoCatalogue[0].variant_id,serial_number:"DEMO-LF3800",asset_number:"BTCC-001",nickname:"Main Outfield Mower",purchase_date:"2025-03-14",current_engine_hours:1284.5,current_reel_hours:642.2,status:"ready",variant:{variant_name:"LF3800 5-Gang"},model:{model_name:"LF3800"},manufacturer:{name:"Jacobsen"}}];
+  state.dashboardDue=demoServiceDue("demo-lf3800");
 }
 document.addEventListener("keydown",e=>{
   if(e.key!=="Enter"&&e.key!==" ")return;
@@ -1015,6 +1055,22 @@ document.addEventListener("click",e=>{
   if(x==="demo"){state.demo=true;localStorage.setItem(DEMO_KEY,"true");loadDemo();closeModal();return render()}
   if(x==="close")return closeModal();
   if(x==="add"){state.catalogueResults=[];return addModal()}
+  if(x==="catalogue-search-tab"||x==="web-search-tab"){
+    const web=x==="web-search-tab";document.querySelector("#catalogue-pane")?.toggleAttribute("hidden",web);document.querySelector("#web-pane")?.toggleAttribute("hidden",!web);
+    document.querySelectorAll(".discovery-tab").forEach(b=>b.classList.toggle("active",b.dataset.action===x));
+    if(web&&!state.webResults.length){const q=document.querySelector("#q");if(q&&!q.value)q.value=state.webSport;searchGroundsWeb(q?.value)}return;
+  }
+  if(x==="web-sport"){
+    state.webSport=a.dataset.sport||"golf";document.querySelectorAll(".sport-filter").forEach(b=>b.classList.toggle("active",b===a));
+    const q=document.querySelector("#q");if(q)q.value=state.webSport;return searchGroundsWeb(q?.value);
+  }
+  if(x==="web-search")return searchGroundsWeb();
+  if(x==="search-web-result"){
+    const query=a.dataset.query||"";
+    document.querySelector("#catalogue-pane")?.removeAttribute("hidden");document.querySelector("#web-pane")?.setAttribute("hidden","");
+    document.querySelectorAll(".discovery-tab").forEach(b=>b.classList.toggle("active",b.dataset.action==="catalogue-search-tab"));
+    const q=document.querySelector("#q");if(q&&query){q.value=query;search(query)}return;
+  }
   if(x==="select"){const r=state.catalogueResults.find(v=>v.variant_id===a.dataset.id);if(r)machineModal(r);return}
   if(x==="accept-identified"){
     const pending=state.pendingIdentification,candidates=pending?.candidates||[],r=candidates[Number(a.dataset.index)];
