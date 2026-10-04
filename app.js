@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 31963)
+Total output lines: 1139
+
 
 let createClient = null;
 async function loadSupabaseClient(){
@@ -181,7 +184,7 @@ async function search(q){
 function webResultCard(r,index){
   const signal={exact_match:"Exact model",close_match:"Closest model",related_option:"Related option"}[r.match_type]||"Web match";
   const refs=(r.source_urls||[]).map(u=>state.webCitations.find(c=>c.url===u)).filter(Boolean);
-  return "<article class='web-result'><div class='web-result-top'><span class='web-result-signal'>"+esc(signal)+"</span><span class='web-result-sport'>UK web match</span></div><div class='web-result-title'>"+esc(r.manufacturer)+" <strong>"+esc(r.model)+"</strong></div><div class='web-result-type'>"+esc(r.equipment_type)+"</div><p class='match-reason'>"+esc(r.match_reason)+"</p><p>"+esc(r.evidence)+"</p><div class='web-result-sources'>"+(refs.length?refs.map(c=>"<a href='"+esc(c.url)+"' target='_blank' rel='noopener noreferrer'>"+esc(c.title||new URL(c.url).hostname)+" ↗</a>").join(""):"<span>Open source details unavailable</span>")+"</div><div class='web-result-actions'><button class='btn small web-result-add' data-action='add-web-machine' data-index='"+index+"'>Add to Garage</button><button class='web-result-action' data-action='search-web-result' data-query='"+esc([r.manufacturer,r.model].join(" "))+"'>Check verified catalogue <span>↗</span></button></div></article>";
+  return "<article class='web-result'>"+(r.image_url?"<div class='web-result-image'><img src='"+esc(r.image_url)+"' alt='"+esc(r.manufacturer+" "+r.model+" manufacturer reference image")+"' loading='lazy'><span>MANUFACTURER IMAGE</span></div>":"")+"<div class='web-result-top'><span class='web-result-signal'>"+esc(signal)+"</span><span class='web-result-sport'>UK web match</span></div><div class='web-result-title'>"+esc(r.manufacturer)+" <strong>"+esc(r.model)+"</strong></div><div class='web-result-type'>"+esc(r.equipment_type)+"</div><p class='match-reason'>"+esc(r.match_reason)+"</p><p>"+esc(r.evidence)+"</p><div class='web-result-sources'>"+(refs.length?refs.map(c=>"<a href='"+esc(c.url)+"' target='_blank' rel='noopener noreferrer'>"+esc(c.title||new URL(c.url).hostname)+" ↗</a>").join(""):"<span>Open source details unavailable</span>")+(r.image_source_url?"<a href='"+esc(r.image_source_url)+"' target='_blank' rel='noopener noreferrer'>Image source ↗</a>":"")+"</div><div class='web-result-actions'><button class='btn small web-result-add' data-action='add-web-machine' data-index='"+index+"'>Add to Garage</button><button class='web-result-action' data-action='search-web-result' data-query='"+esc([r.manufacturer,r.model].join(" "))+"'>Check verified catalogue <span>↗</span></button></div></article>";
 }
 async function searchGroundsWeb(q){
   const box=document.querySelector("#web-results");if(!box)return;
@@ -192,7 +195,7 @@ async function searchGroundsWeb(q){
     if(state.demo){
       const isRegal=/allett.*regal.*36|regal.*36.*allett/i.test(query);
       const url="https://allett.co.uk/products/allett-regal-36-cylinder-mower";
-      result=isRegal?{machines:[{manufacturer:"Allett",model:"Regal 36",equipment_type:"Professional cylinder mower",match_type:"exact_match",match_reason:"The manufacturer’s product page confirms the exact Allett Regal 36 model.",evidence:"Allett identifies the Regal 36 as a 36-inch professional cylinder mower for sports surfaces including cricket and football.",source_urls:[url]},{manufacturer:"Allett",model:"Regal 42",equipment_type:"Professional cylinder mower",match_type:"close_match",match_reason:"Same Regal product family, with a wider 42-inch cutting width.",evidence:"Allett lists the Regal 42 alongside the Regal 36 as the wider model in the range.",source_urls:[url]}],sources:[{url,title:"Allett · Regal 36"}],caveat:"Demo result based on the manufacturer’s published product range."}:{machines:[],sources:[],caveat:"Live AI web search is available when REELMOW is connected to its workspace. This demo can show an example search for Allett Regal 36."};
+      result=isRegal?{machines:[{manufacturer:"Allett",model:"Regal 36",equipment_type:"Professional cylinder mower",match_type:"exact_match",match_reason:"The manufacturer’s product page confirms the exact Allett Regal 36 model.",evidence:"Allett identifies the Regal 36 as a 36-inch professional cylinder mower for sports surfaces including cricket and football.",source_urls:[url],image_url:"https://allett.co.uk/cdn/shop/files/REGAL-36-1500x1500-clear.png?v=1733841862&width=1500",image_source_url:url},{manufacturer:"Allett",model:"Regal 42",equipment_type:"Professional cylinder mower",match_type:"close_match",match_reason:"Same Regal product family, with a wider 42-inch cutting width.",evidence:"Allett lists the Regal 42 alongside the Regal 36 as the wider model in the range.",source_urls:[url]}],sources:[{url,title:"Allett · Regal 36"}],caveat:"Demo result based on the manufacturer’s published product range."}:{machines:[],sources:[],caveat:"Live AI web search is available when REELMOW is connected to its workspace. This demo can show an example search for Allett Regal 36."};
       state.webResults=result.machines;state.webCitations=result.sources;state.webResearchCaveat=result.caveat;
     }else{const {data,error}=await state.client.functions.invoke("discover-grounds-machines",{body:{query}});if(error)throw error;state.webResults=data?.machines||[];state.webCitations=data?.sources||[];state.webResearchCaveat=data?.caveat||""}
     box.innerHTML=(state.webResults.length?state.webResults.map(webResultCard).join(""):"<div class='empty-mini'><b>No source-verified machine match found.</b><div class='tiny' style='margin-top:5px'>Check the spelling, try a shorter model name, or scan the machine plate.</div></div>")+(state.webResearchCaveat?"<div class='web-research-note'>"+esc(state.webResearchCaveat)+(state.demo?" <span>DEMO EXAMPLE</span>":"")+"</div>":"");
@@ -203,7 +206,7 @@ function addWebMatchedMachine(machine){
   if(!machine||!machine.manufacturer||!machine.model)return toast("This result is missing a verified machine identity.");
   state.pendingWebMachine=machine;
   const label=machine.match_type==="exact_match"?"Exact model from web search":machine.match_type==="close_match"?"Closest model from web search":"Related model from web search";
-  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Add a web match</div><h2>"+esc(machine.manufacturer)+" "+esc(machine.model)+"</h2><p class='tiny'>"+esc(label)+" · Not yet in the verified catalogue</p></div><button class='close' data-action='close'>×</button></div><div class='web-add-notice'><b>Save this mower to your Garage?</b><span>It will be stored as a web-identified machine, with its source links. It won’t be added to REELMOW’s verified catalogue.</span><span>Model specifications and a service schedule won’t be available until the catalogue has an exact match.</span></div><form id='web-machine-form'><div class='field'><label>Machine name in your Garage</label><input class='input' id='web-machine-nickname' value='"+esc(machine.manufacturer+" "+machine.model)+"' maxlength='120'></div><div class='grid two'><div class='field'><label>Serial number <span class='optional'>Optional</span></label><input class='input' id='web-machine-serial' maxlength='120'></div><div class='field'><label>Asset number <span class='optional'>Optional</span></label><input class='input' id='web-machine-asset' maxlength='120'></div></div><div class='grid two'><div class='field'><label>Engine hours <span class='optional'>Optional</span></label><input class='input' id='web-machine-hours' type='number' min='0' step='.1'></div><div class='field'><label>Reel hours <span class='optional'>Optional</span></label><input class='input' id='web-machine-reel-hours' type='number' min='0' step='.1'></div></div><div class='field'><label>Notes <span class='optional'>Optional</span></label><textarea class='input' id='web-machine-notes' rows='2'></textarea></div><div class='web-add-source'><strong>Match evidence</strong><p>"+esc(machine.match_reason)+"</p><a href='"+esc(machine.source_urls?.[0]||"#")+"' target='_blank' rel='noopener noreferrer'>Open source ↗</a></div><button class='btn web-add-submit' style='width:100%;margin-top:16px'>Add to Garage as unverified</button></form></div></div>");
+  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Add a web match</div><h2>"+esc(machine.manufacturer)+" "+esc(machine.model)+"</h2><p class='tiny'>"+esc(label)+" · Not yet in the verified catalogue</p></div><button class='close' data-action='close'>×</button></div>"+(machine.image_url?"<div class='web-add-image'><img src='"+esc(machine.image_url)+"' alt='"+esc(machine.manufacturer+" "+machine.model+" manufacturer reference image")+"'><span>MANUFACTURER REFERENCE IMAGE · <a href='"+esc(machine.image_source_url||machine.source_urls?.[0]||"#")+"' target='_blank' rel='noopener noreferrer'>SOURCE ↗</a></span></div>":"")+"<div class='web-add-notice'><b>Save this mower to your Garage?</b><span>It will be stored as a web-identified machine, with its source links. It won’t be added to REELMOW’s verified catalogue.</span><span>Model specifications and a service schedule won’t be available until the catalogue has an exact match.</span></div><form id='web-machine-form'><div class='field'><label>Machine name in your Garage</label><input class='input' id='web-machine-nickname' value='"+esc(machine.manufacturer+" "+machine.model)+"' maxlength='120'></div><div class='grid two'><div class='field'><label>Serial number <span class='optional'>Optional</span></label><input class='input' id='web-machine-serial' maxlength='120'></div><div class='field'><label>Asset number <span class='optional'>Optional</span></label><input class='input' id='web-machine-asset' maxlength='120'></div></div><div class='grid two'><div class='field'><label>Engine hours <span class='optional'>Optional</span></label><input class='input' id='web-machine-hours' type='number' min='0' step='.1'></div><div class='field'><label>Reel hours <span class='optional'>Optional</span></label><input class='input' id='web-machine-reel-hours' type='number' min='0' step='.1'></div></div><div class='field'><label>Notes <span class='optional'>Optional</span></label><textarea class='input' id='web-machine-notes' rows='2'></textarea></div><div class='web-add-source'><strong>Match evidence</strong><p>"+esc(machine.match_reason)+"</p><a href='"+esc(machine.source_urls?.[0]||"#")+"' target='_blank' rel='noopener noreferrer'>Open source ↗</a></div><button class='btn web-add-submit' style='width:100%;margin-top:16px'>Add to Garage as unverified</button></form></div></div>");
   document.querySelector("#web-machine-form").addEventListener("submit",saveWebMatchedMachine);
 }
 async function saveWebMatchedMachine(e){
@@ -212,7 +215,7 @@ async function saveWebMatchedMachine(e){
   const machine=state.pendingWebMachine;if(!machine)return toast("Choose a web match first.");
   const engineHours=num("#web-machine-hours"),reelHours=num("#web-machine-reel-hours");
   if(engineHours!=null&&engineHours<0||reelHours!=null&&reelHours<0)return toast("Hours cannot be negative.");
-  const record={id:crypto.randomUUID(),garage_id:state.garage.id,machine_variant_id:null,nickname:val("#web-machine-nickname")||machine.manufacturer+" "+machine.model,serial_number:val("#web-machine-serial")||null,asset_number:val("#web-machine-asset")||null,current_engine_hours:engineHours,current_reel_hours:reelHours,status:"ready",discovered_manufacturer:machine.manufacturer,discovered_model:machine.model,discovered_equipment_type:machine.equipment_type,discovered_match_type:machine.match_type,discovered_match_reason:machine.match_reason,discovered_evidence:machine.evidence,discovered_source_urls:machine.source_urls,model:{model_name:machine.model},manufacturer:{name:machine.manufacturer},variant:{variant_name:"AI web match · unverified"}};
+  const record={id:crypto.randomUUID(),garage_id:state.garage.id,machine_variant_id:null,nickname:val("#web-machine-nickname")||machine.manufacturer+" "+machine.model,serial_number:val("#web-machine-serial")||null,asset_number:val("#web-machine-asset")||null,current_engine_hours:engineHours,current_reel_hours:reelHours,status:"ready",discovered_manufacturer:machine.manufacturer,discovered_model:machine.model,discovered_equipment_type:machine.equipment_type,discovered_match_type:machine.match_type,discovered_match_reason:machine.match_reason,discovered_evidence:machine.evidence,discovered_source_urls:machine.source_urls,discovered_image_url:machine.image_url||null,discovered_image_source_url:machine.image_source_url||null,model:{model_name:machine.model},manufacturer:{name:machine.manufacturer},variant:{variant_name:"AI web match · unverified"}};
   if(state.demo){state.machines.unshift(record);state.pendingWebMachine=null;closeModal();toast("Web-identified mower added to Garage");return render()}
   if(!navigator.onLine)return toast("Connect to the internet to add a web-identified machine.");
   try{
@@ -223,7 +226,7 @@ async function saveWebMatchedMachine(e){
       p_discovered_match_reason:machine.match_reason||null,p_discovered_evidence:machine.evidence||null,
       p_discovered_source_urls:machine.source_urls,p_nickname:record.nickname,p_serial_number:record.serial_number,
       p_asset_number:record.asset_number,p_current_engine_hours:engineHours,p_current_reel_hours:reelHours,
-      p_notes:val("#web-machine-notes")||null
+      p_notes:val("#web-machine-notes")||null,p_discovered_image_url:machine.image_url||null,p_discovered_image_source_url:machine.image_source_url||null
     });
     if(error)throw error;
     state.pendingWebMachine=null;closeModal();await loadMachines();toast("Web-identified mower added to Garage");render();
@@ -480,7 +483,7 @@ function renderGarage(){
         "<div class='garage-header-meta'><span class='garage-status-label "+((outOfService||attention||historyUnknown)?"warning":"")+"' aria-label='"+esc(attentionCopy)+"'><span class='garage-live-dot'></span><span class='garage-status-full'>"+esc(attentionCopy)+"</span><span class='garage-status-short'>"+esc(shortAttentionCopy)+"</span></span><button class='garage-add-link' data-action='add' aria-label='Add machine'><span class='garage-add-icon'>＋</span><span>Add machine</span></button></div>"+
       "</header>"+
       "<section class='garage-hero' aria-label='Featured machine: "+esc(leadName)+"'>"+
-        "<div class='garage-hero-photo"+(isJacobsenLF3800?" concept-photo":"")+"' data-garage-photo='"+esc(lead.id)+"'>"+(isJacobsenLF3800?"<img src='./assets/garage-hero-concept.jpg' alt='Illustrative five-gang reel mower in a modern machinery garage' fetchpriority='high'>":"<div class='garage-photo-placeholder'>"+machineIcon()+"</div>")+"</div>"+
+        "<div class='garage-hero-photo"+(isJacobsenLF3800?" concept-photo":"")+"' data-garage-photo='"+esc(lead.id)+"'>"+(isJacobsenLF3800?"<img src='./assets/garage-hero-concept.jpg' alt='Illustrative five-gang reel mower in a modern machinery garage' fetchpriority='high'>":lead.discovered_image_url?"<img src='"+esc(lead.discovered_image_url)+"' alt='"+esc(lead.discovered_manufacturer+" "+lead.discovered_model+" manufacturer reference image")+"' fetchpriority='high'>":"<div class='garage-photo-placeholder'>"+machineIcon()+"</div>")+"</div>"+
         "<div class='garage-hero-shade'></div>"+
         "<div class='garage-hero-content'>"+
           "<div class='garage-hero-top'><div class='garage-hero-index'><span class='garage-index-mark'>01</span><span class='garage-eyebrow'>"+esc(leadIdentity)+"</span></div><span class='garage-status-chip "+(leadReadiness.startsWith("READY")?"":lead.status==="in_service"?"working":"attention")+"'><i></i>"+esc(leadReadiness)+"</span></div>"+
@@ -499,7 +502,7 @@ function renderGarage(){
       "</section>"+
       (list.length>1?"<section class='garage-collection'><div class='garage-section-heading'><div><span class='garage-kicker'>Equipment</span><h2>The Garage</h2></div><span>"+list.length+" assets</span></div><div class='garage-machine-grid'>"+list.slice(1).map(m=>{
         const hrs=m.current_engine_hours!=null?Number(m.current_engine_hours).toLocaleString()+" h":"Hours not recorded";
-        return "<article class='garage-machine-tile' data-action='open' data-id='"+esc(m.id)+"'><div class='garage-tile-photo' data-garage-photo='"+esc(m.id)+"'><div class='garage-photo-placeholder'>"+machineIcon()+"</div></div><div class='garage-tile-overlay'></div><div class='garage-tile-content'><span>"+esc(m.manufacturer?.name||"Machine")+"</span><h3>"+esc(m.nickname||m.model?.model_name||"Machine")+"</h3><small>"+(m.discovered_model?"MODEL UNVERIFIED":esc(statusLabel(m.status)))+" · "+hrs+"</small></div></article>";
+        return "<article class='garage-machine-tile' data-action='open' data-id='"+esc(m.id)+"'><div class='garage-tile-photo' data-garage-photo='"+esc(m.id)+"'>"+(m.discovered_image_url?"<img src='"+esc(m.discovered_image_url)+"' alt='"+esc(m.discovered_manufacturer+" "+m.discovered_model+" manufacturer reference image")+"' loading='lazy'>":"<div class='garage-photo-placeholder'>"+machineIcon()+"</div>")+"</div><div class='garage-tile-overlay'></div><div class='garage-tile-content'><span>"+esc(m.manufacturer?.name||"Machine")+"</span><h3>"+esc(m.nickname||m.model?.model_name||"Machine")+"</h3><small>"+(m.discovered_model?"MODEL UNVERIFIED":esc(statusLabel(m.status)))+" · "+hrs+"</small></div></article>";
       }).join("")+"</div></section>":"")+
       "<section class='garage-quick'><div class='garage-section-heading'><div><span class='garage-kicker'>Keep things moving</span><h2>Workshop</h2></div><span>FIELD TOOLS</span></div><div class='garage-quick-links'><button data-action='quick-hours'><i>◷</i><span><b>Log hours</b><small>Update a machine meter</small></span><em>↗</em></button><button data-action='quick-service'><i>⌁</i><span><b>Record service</b><small>Keep maintenance current</small></span><em>↗</em></button><button data-action='quick-fault'><i>＋</i><span><b>Report a problem</b><small>Flag an issue for the team</small></span><em>↗</em></button></div></section>"+
     "</section>"
@@ -529,73 +532,7 @@ function renderDetail(){
   mount("<div class='machine-page'>"+
     "<div class='machine-back'><button class='back' data-action='back'>← Garage</button></div>"+
     "<section class='machine-hero-compact'>"+
-      "<div class='machine-identity'><div class='machine-hero-icon'>"+machineIcon()+"</div><div><div class='eyebrow'>"+esc(m.manufacturer?.name||"Manufacturer")+" · "+esc(m.variant?.variant_name||"Variant")+"</div><h1>"+esc(m.nickname||m.model?.model_name||"Machine")+"</h1><div class='machine-status-line'><span class='mini-status "+(m.status==="out_of_service"?"attention":"") +"'></span>"+esc(statusLabel(m.status))+"<button class='status-change' data-action='status'>Change</button></div></div></div>"+
-      "<div class='machine-primary-actions'><button class='btn' data-action='machine-mow'>Mow</button><button class='btn secondary' data-action='hours'>Hours</button><button class='btn secondary' data-action='service'>Service</button><button class='btn secondary' data-action='fault'>Problem</button></div>"+
-    "</section>"+
-    (pending?"<div class='note compact-note'><b>"+pending+" saved change"+(pending===1?"":"s")+" pending sync.</b></div>":"")+
-    webIdentityNote+
-    "<section class='machine-glance'>"+
-      "<div class='glance-metric'><strong>"+(m.current_engine_hours??"—")+"</strong><small>Engine hours</small></div>"+
-      "<div class='glance-metric'><strong>"+(m.current_reel_hours??"—")+"</strong><small>Reel hours</small></div>"+
-      "<div class='glance-metric'><strong id='machine-due-count'>—</strong><small>Maintenance</small></div>"+
-    "</section>"+
-    "<section class='machine-next'><div class='eyebrow'>Next</div><div id='service-due'><div class='loading'><div class='spinner'></div>Checking service schedule…</div></div></section>"+
-    "<div class='machine-disclosures'>"+
-      "<details open><summary><span>Problems</span><span class='disclosure-meta'>Active issues & repairs</span></summary><div class='disclosure-body'><div class='actions disclosure-action'><button class='btn secondary small' data-action='fault'>Report problem</button></div><div id='machine-faults'><div class='loading'><div class='spinner'></div>Loading fault history…</div></div></div></details>"+
-      "<details><summary><span>Service history</span><span class='disclosure-meta'>Completed maintenance</span></summary><div class='disclosure-body'><div id='service-history'><div class='loading'><div class='spinner'></div>Loading service history…</div></div></div></details>"+
-      "<details><summary><span>Machine details</span><span class='disclosure-meta'>Identity & ownership</span></summary><div class='disclosure-body'><div class='detail-facts'><div><small>Serial number</small><strong>"+esc(m.serial_number||"Not recorded")+"</strong></div><div><small>Asset number</small><strong>"+esc(m.asset_number||"Not recorded")+"</strong></div><div><small>Purchase date</small><strong>"+esc(m.purchase_date||"Not recorded")+"</strong></div></div><button class='btn secondary small' data-action='edit'>Edit machine</button></div></details>"+
-      "<details><summary><span>Specifications</span><span class='disclosure-meta'>"+(m.discovered_model?"Not catalogue verified":"Verified catalogue data")+"</span></summary><div class='disclosure-body'><div id='specs'><div class='loading'><div class='spinner'></div>Loading verified specifications…</div></div></div></details>"+
-      "<details><summary><span>Evidence</span><span class='disclosure-meta'>Photos & documents</span></summary><div class='disclosure-body'><div class='evidence-actions'><button class='btn secondary small' data-action='photo-upload'>Add photo</button><button class='btn secondary small' data-action='document-upload'>Add document</button></div><div class='evidence-sub'><div class='eyebrow'>Photos</div><div id='machine-photos'><div class='loading'><div class='spinner'></div>Loading photos…</div></div></div><div class='evidence-sub'><div class='eyebrow'>Documents</div><div id='machine-documents'><div class='loading'><div class='spinner'></div>Loading documents…</div></div></div></div></details>"+
-    "</div>"+
-  "</div>");
-  loadSpecs(m);loadServiceData(m);loadEvidence(m);loadMachineFaults(m);
-}
-function canOperate(){return state.demo||["owner","admin","manager","operator"].includes(state.role)}
-function canEditMachine(){return canOperate()}
-function canChangeStatus(){return canOperate()}
-function statusLabel(status){return String(status||"ready").replaceAll("_"," ").replace(/\b\w/g,c=>c.toUpperCase())}
-function statusClass(status){return status==="service_due"||status==="out_of_service"?"service":status==="in_service"?"fault":status==="retired"?"retired":"ready"}
-function faultHtml(){
-  if(!state.machineFaults.length)return "<div class='empty-mini'><div class='tiny'>No reported problems.</div></div>";
-  return "<div class='list'>"+state.machineFaults.map(x=>{
-    const actions=x.status==="open"
-      ?"<button class='btn ghost small' data-action='ack-fault' data-id='"+esc(x.id)+"'>Acknowledge</button>"
-      :x.status==="acknowledged"
-        ?"<button class='btn ghost small' data-action='resolve-fault' data-id='"+esc(x.id)+"'>Resolve</button>"
-        :"<span class='badge ready'>RESOLVED</span>";
-    return "<div class='list-row fault-row'><div><div class='list-title'>"+esc(x.severity.toUpperCase())+" · "+esc(x.status.replace("_"," "))+"</div><div class='list-meta'>"+esc(new Date(x.reported_at).toLocaleDateString())+" · "+esc(x.description)+"</div>"+(x.resolution_notes?"<div class='list-meta' style='margin-top:4px'>"+esc(x.resolution_notes)+"</div>":"")+"</div><div class='actions'>"+actions+"</div></div>";
-  }).join("")+"</div>";
-}
-async function loadMachineFaults(m){
-  if(state.demo){state.machineFaults=[]}
-  else{
-    const {data,error}=await state.client.schema("garage").from("machine_faults").select("id,severity,status,description,reported_at,resolved_at,resolution_notes").eq("machine_id",m.id).order("reported_at",{ascending:false}).limit(20);
-    if(error)return toast(error.message);
-    state.machineFaults=data||[];
-  }
-  const box=document.querySelector("#machine-faults");if(box)box.innerHTML=faultHtml();
-}
-function acknowledgeFault(id){
-  const fault=state.machineFaults.find(x=>x.id===id);if(!fault)return;
-  if(state.demo){fault.status="acknowledged";closeModal();toast("Problem acknowledged");return renderDetail()}
-  (async()=>{
-    try{
-      const {error}=await state.client.schema("garage").rpc("acknowledge_machine_fault",{p_fault_id:id,p_notes:"Acknowledged in Garage"});
-      if(error)throw error;
-      await loadMachines();state.selected=state.machines.find(x=>x.id===state.selected.id)||state.selected;await loadMachineFaults(state.selected);closeModal();toast("Problem acknowledged");renderDetail();
-    }catch(x){toast(x.message||"Could not acknowledge problem")}
-  })();
-}
-function resolveFaultModal(id){
-  const fault=state.machineFaults.find(x=>x.id===id);if(!fault)return;
-  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Resolve issue</div><h2>Return the machine to repair complete.</h2><p class='tiny'>Record what was repaired, adjusted or checked. The machine will move to Repaired.</p></div><button class='close' data-action='close'>×</button></div><form id='resolve-form'><div class='field'><label>Resolution notes</label><textarea class='input' id='resolution-notes' rows='4' required placeholder='What was repaired, adjusted or checked?'></textarea></div><button class='btn' style='width:100%'>Mark repaired</button></form></div></div>");
-  document.querySelector("#resolve-form").addEventListener("submit",async e=>{
-    e.preventDefault();const notes=val("#resolution-notes");if(!notes){toast("Resolution notes are required");return}
-    if(state.demo){fault.status="resolved";fault.resolution_notes=notes;fault.resolved_at=new Date().toISOString();state.selected.status="repaired";closeModal();toast("Problem resolved");return renderDetail()}
-    try{
-      const {error}=await state.client.schema("garage").rpc("resolve_machine_fault",{p_fault_id:id,p_resolution_notes:notes});
-      if(error)throw error;
-      closeModal();await loadMachines();state.selected=state.machines.find(x=>x.id===state.selected.id)||state.selected;await loadMachineFaults(state.selected);toast("Problem resolved — machine is repaired");renderDetail();
+      "<div class='machine-identity'><div class='machine-hero-icon'>"+machineIcon()+"</div><div><div class='eyebrow'>"+esc(m.manufacturer?.name||"Manufacturer")+" · "+esc(m.variant?.var…1963 tokens truncated…id===state.selected.id)||state.selected;await loadMachineFaults(state.selected);toast("Problem resolved — machine is repaired");renderDetail();
     }catch(x){toast(x.message||"Could not resolve problem")}
   });
 }
