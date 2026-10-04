@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 31963)
+Total output lines: 1139
+
 
 let createClient = null;
 async function loadSupabaseClient(){
@@ -15,7 +18,7 @@ const demoCatalogue=[
   {model_id:"demo-allett-shaver",manufacturer_name:"Allett",model_name:"Shaver",variant_id:"demo-allett-shaver-24",variant_name:"Shaver 24",machine_type:"Cylinder Mower",rank:.97},
   {model_id:"demo-atco-royale",manufacturer_name:"Atco",model_name:"Royale 24",variant_id:"demo-atco-royale-ic",variant_name:"Royale 24 I/C - F016310542",machine_type:"Cylinder Mower",rank:.96}
 ];
-const state={client:null,user:null,role:null,org:null,garage:null,orgs:[],garages:[],workspaceNeedsSelection:false,offline:false,syncing:false,outboxCount:0,machines:[],selected:null,specs:[],serviceDue:[],serviceRecords:[],hoursLog:[],catalogueResults:[],dashboardDue:[],openFaults:[],machineFaults:[],activity:[],mow:{active:false,paused:false,sessionId:null,machineId:null,watchId:null,startedAt:null,lastPoint:null,trackPoints:[],distanceM:0,points:0,accuracyM:null,speedMps:null,headingDeg:null,pattern:"stripe",targetSpeedKph:null},loading:false,error:"",pendingPlateFile:null,pendingIdentification:null,quickAction:null,view:localStorage.getItem("reelmow.view.v1")||"today",demo:localStorage.getItem(DEMO_KEY)==="true" && !(window.REELMOW_CONFIG?.url && window.REELMOW_CONFIG?.key)};
+const state={client:null,user:null,role:null,org:null,garage:null,orgs:[],garages:[],workspaceNeedsSelection:false,offline:false,syncing:false,outboxCount:0,machines:[],selected:null,specs:[],serviceDue:[],serviceRecords:[],hoursLog:[],catalogueResults:[],webResults:[],webCitations:[],webResearchCaveat:"",dashboardDue:[],openFaults:[],machineFaults:[],activity:[],mow:{active:false,paused:false,sessionId:null,machineId:null,watchId:null,startedAt:null,lastPoint:null,trackPoints:[],distanceM:0,points:0,accuracyM:null,speedMps:null,headingDeg:null,pattern:"stripe",targetSpeedKph:null},loading:false,webResearching:false,error:"",pendingPlateFile:null,pendingIdentification:null,pendingWebMachine:null,quickAction:null,view:localStorage.getItem("reelmow.view.v1")||"garage",demo:localStorage.getItem(DEMO_KEY)==="true" && !(window.REELMOW_CONFIG?.url && window.REELMOW_CONFIG?.key)};
 
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const val=s=>document.querySelector(s)?.value.trim()||"";
@@ -63,7 +66,7 @@ async function syncOutbox(){
   if(remaining.length!==items.length){toast(remaining.length?"Some saved changes are still waiting to sync.":"Saved changes synced.");try{await loadMachines()}catch{}}
 }
 function modal(h){document.querySelector(".modal-backdrop")?.remove();document.body.insertAdjacentHTML("beforeend",h)}
-function closeModal(){document.querySelector(".modal-backdrop")?.remove();state.pendingPlateFile=null;state.pendingIdentification=null}
+function closeModal(){document.querySelector(".modal-backdrop")?.remove();state.pendingPlateFile=null;state.pendingIdentification=null;state.pendingWebMachine=null}
 async function imageDataUrl(file,maxSize=1600,quality=.82){
   if(!file||!file.type.startsWith("image/")) throw new Error("Please choose an image");
   if(file.size>12_000_000) throw new Error("Image is too large. Please choose a photo under 12 MB.");
@@ -145,16 +148,16 @@ function renderWorkspacePicker(){
   mount("<div style='max-width:760px;margin:7vh auto'><div class='card'><div class='eyebrow'>Workspace selection</div><h1 style='font-size:40px'>Choose where you're working.</h1><p class='lede'>Select the organisation and physical Garage you want to operate.</p>"+rows+"</div></div>");
 }
 async function loadMachines(){
-  const {data,error}=await state.client.schema("garage").from("machines").select("id,garage_id,machine_variant_id,serial_number,asset_number,nickname,purchase_date,purchase_price,warranty_start_date,warranty_end_date,warranty_provider,ownership_type,ownership_name,current_engine_hours,current_reel_hours,status,notes,created_at").eq("garage_id",state.garage.id).order("created_at",{ascending:false});if(error)throw error;
+  const {data,error}=await state.client.schema("garage").from("machines").select("id,garage_id,machine_variant_id,serial_number,asset_number,nickname,purchase_date,purchase_price,warranty_start_date,warranty_end_date,warranty_provider,ownership_type,ownership_name,current_engine_hours,current_reel_hours,status,notes,discovered_manufacturer,discovered_model,discovered_equipment_type,discovered_match_type,discovered_match_reason,discovered_evidence,discovered_source_urls,created_at").eq("garage_id",state.garage.id).order("created_at",{ascending:false});if(error)throw error;
   const rows=data||[];if(!rows.length){state.machines=[];return}
   const vids=rows.map(x=>x.machine_variant_id).filter(Boolean);
-  const {data:v,error:ve}=await state.client.schema("catalogue").from("machine_variants").select("id,variant_name,machine_model_id").in("id",vids);if(ve)throw ve;
+  const {data:v,error:ve}=vids.length?await state.client.schema("catalogue").from("machine_variants").select("id,variant_name,machine_model_id").in("id",vids):{data:[],error:null};if(ve)throw ve;
   const mids=(v||[]).map(x=>x.machine_model_id);
   const {data:mo,error:me}=mids.length?await state.client.schema("catalogue").from("machine_models").select("id,model_name,model_code,manufacturer_id").in("id",mids):{data:[]};if(me)throw me;
   const fids=(mo||[]).map(x=>x.manufacturer_id);
   const {data:f,error:fe}=fids.length?await state.client.schema("catalogue").from("manufacturers").select("id,name").in("id",fids):{data:[]};if(fe)throw fe;
   const vm=new Map((v||[]).map(x=>[x.id,x])),mm=new Map((mo||[]).map(x=>[x.id,x])),fm=new Map((f||[]).map(x=>[x.id,x]));
-  state.machines=rows.map(x=>{const vv=vm.get(x.machine_variant_id),model=vv&&mm.get(vv.machine_model_id),man=model&&fm.get(model.manufacturer_id);return {...x,variant:vv,model,manufacturer:man}});
+  state.machines=rows.map(x=>{const vv=vm.get(x.machine_variant_id),catalogueModel=vv&&mm.get(vv.machine_model_id),catalogueManufacturer=catalogueModel&&fm.get(catalogueModel.manufacturer_id);return {...x,variant:vv||(x.discovered_model?{variant_name:"AI web match · unverified"}:null),model:catalogueModel||(x.discovered_model?{model_name:x.discovered_model}:null),manufacturer:catalogueManufacturer||(x.discovered_manufacturer?{name:x.discovered_manufacturer}:null)}});
   const ids=state.machines.map(x=>x.id);
   if(!ids.length){state.dashboardDue=[];return}
   const {data:due,error:de}=await state.client.schema("garage").from("machine_service_due").select("machine_id,service_status,hours_remaining,task_name").in("machine_id",ids);
@@ -175,15 +178,66 @@ async function search(q){
     else{const {data,error}=await state.client.schema("catalogue").rpc("search_machines",{search_text:q.trim(),result_limit:12});if(error)throw error;state.catalogueResults=data||[]}
     box.innerHTML=state.catalogueResults.length
       ?state.catalogueResults.map(r=>"<button class='result' data-action='select' data-id='"+esc(r.variant_id)+"'><div><div class='result-name'>"+esc(r.manufacturer_name)+" "+esc(r.model_name)+"</div><div class='result-meta'>"+esc(r.variant_name||"Model")+" · "+esc(r.machine_type||"Machine")+"</div></div><span class='arrow'>›</span></button>").join("")
-      :"<div class='empty-mini'><div class='tiny'><b>Nothing found in the catalogue.</b></div><div class='tiny' style='margin-top:5px'>If the machine is sitting in front of you, scan its model plate and REELMOW will identify the text so we can search again.</div><button class='btn secondary small' style='margin-top:12px' data-action='unknown-machine'>Scan model plate</button></div>";
+      :"<div class='empty-mini'><div class='tiny'><b>No verified catalogue record yet.</b></div><div class='tiny' style='margin-top:5px'>Let AI search the web for the exact mower or its closest real match.</div><button class='btn small research-search-button' style='margin-top:12px' data-action='search-web-query' data-query='"+esc(q.trim())+"'>Find closest match online <span>↗</span></button></div>";
   }catch(e){box.innerHTML="<div class='error'>"+esc(e.message||"Search failed")+"</div>"}finally{state.loading=false}
+}
+function webResultCard(r,index){
+  const signal={exact_match:"Exact model",close_match:"Closest model",related_option:"Related option"}[r.match_type]||"Web match";
+  const refs=(r.source_urls||[]).map(u=>state.webCitations.find(c=>c.url===u)).filter(Boolean);
+  return "<article class='web-result'>"+(r.image_url?"<div class='web-result-image'><img src='"+esc(r.image_url)+"' alt='"+esc(r.manufacturer+" "+r.model+" manufacturer reference image")+"' loading='lazy'><span>MANUFACTURER IMAGE</span></div>":"")+"<div class='web-result-top'><span class='web-result-signal'>"+esc(signal)+"</span><span class='web-result-sport'>UK web match</span></div><div class='web-result-title'>"+esc(r.manufacturer)+" <strong>"+esc(r.model)+"</strong></div><div class='web-result-type'>"+esc(r.equipment_type)+"</div><p class='match-reason'>"+esc(r.match_reason)+"</p><p>"+esc(r.evidence)+"</p><div class='web-result-sources'>"+(refs.length?refs.map(c=>"<a href='"+esc(c.url)+"' target='_blank' rel='noopener noreferrer'>"+esc(c.title||new URL(c.url).hostname)+" ↗</a>").join(""):"<span>Open source details unavailable</span>")+(r.image_source_url?"<a href='"+esc(r.image_source_url)+"' target='_blank' rel='noopener noreferrer'>Image source ↗</a>":"")+"</div><div class='web-result-actions'><button class='btn small web-result-add' data-action='add-web-machine' data-index='"+index+"'>Add to Garage</button><button class='web-result-action' data-action='search-web-result' data-query='"+esc([r.manufacturer,r.model].join(" "))+"'>Check verified catalogue <span>↗</span></button></div></article>";
+}
+async function searchGroundsWeb(q){
+  const box=document.querySelector("#web-results");if(!box)return;
+  const query=(q||document.querySelector("#q")?.value||"").trim();if(query.length<2){box.innerHTML="<p class='tiny'>Type a manufacturer or model, such as <b>Allett Regal 36</b>.</p>";return}
+  state.webResearching=true;box.innerHTML="<div class='loading'><div class='spinner'></div>Finding the closest real machines…</div>";
+  try{
+    let result;
+    if(state.demo){
+      const isRegal=/allett.*regal.*36|regal.*36.*allett/i.test(query);
+      const url="https://allett.co.uk/products/allett-regal-36-cylinder-mower";
+      result=isRegal?{machines:[{manufacturer:"Allett",model:"Regal 36",equipment_type:"Professional cylinder mower",match_type:"exact_match",match_reason:"The manufacturer’s product page confirms the exact Allett Regal 36 model.",evidence:"Allett identifies the Regal 36 as a 36-inch professional cylinder mower for sports surfaces including cricket and football.",source_urls:[url],image_url:"https://allett.co.uk/cdn/shop/files/REGAL-36-1500x1500-clear.png?v=1733841862&width=1500",image_source_url:url},{manufacturer:"Allett",model:"Regal 42",equipment_type:"Professional cylinder mower",match_type:"close_match",match_reason:"Same Regal product family, with a wider 42-inch cutting width.",evidence:"Allett lists the Regal 42 alongside the Regal 36 as the wider model in the range.",source_urls:[url]}],sources:[{url,title:"Allett · Regal 36"}],caveat:"Demo result based on the manufacturer’s published product range."}:{machines:[],sources:[],caveat:"Live AI web search is available when REELMOW is connected to its workspace. This demo can show an example search for Allett Regal 36."};
+      state.webResults=result.machines;state.webCitations=result.sources;state.webResearchCaveat=result.caveat;
+    }else{const {data,error}=await state.client.functions.invoke("discover-grounds-machines",{body:{query}});if(error)throw error;state.webResults=data?.machines||[];state.webCitations=data?.sources||[];state.webResearchCaveat=data?.caveat||""}
+    box.innerHTML=(state.webResults.length?state.webResults.map(webResultCard).join(""):"<div class='empty-mini'><b>No source-verified machine match found.</b><div class='tiny' style='margin-top:5px'>Check the spelling, try a shorter model name, or scan the machine plate.</div></div>")+(state.webResearchCaveat?"<div class='web-research-note'>"+esc(state.webResearchCaveat)+(state.demo?" <span>DEMO EXAMPLE</span>":"")+"</div>":"");
+  }catch(e){box.innerHTML="<div class='error'>"+esc(e.message||"Web search is unavailable")+"</div><div class='tiny' style='margin-top:8px'>Try again, or scan the machine plate for an exact catalogue match.</div>"}
+  finally{state.webResearching=false}
+}
+function addWebMatchedMachine(machine){
+  if(!machine||!machine.manufacturer||!machine.model)return toast("This result is missing a verified machine identity.");
+  state.pendingWebMachine=machine;
+  const label=machine.match_type==="exact_match"?"Exact model from web search":machine.match_type==="close_match"?"Closest model from web search":"Related model from web search";
+  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Add a web match</div><h2>"+esc(machine.manufacturer)+" "+esc(machine.model)+"</h2><p class='tiny'>"+esc(label)+" · Not yet in the verified catalogue</p></div><button class='close' data-action='close'>×</button></div>"+(machine.image_url?"<div class='web-add-image'><img src='"+esc(machine.image_url)+"' alt='"+esc(machine.manufacturer+" "+machine.model+" manufacturer reference image")+"'><span>MANUFACTURER REFERENCE IMAGE · <a href='"+esc(machine.image_source_url||machine.source_urls?.[0]||"#")+"' target='_blank' rel='noopener noreferrer'>SOURCE ↗</a></span></div>":"")+"<div class='web-add-notice'><b>Save this mower to your Garage?</b><span>It will be stored as a web-identified machine, with its source links. It won’t be added to REELMOW’s verified catalogue.</span><span>Model specifications and a service schedule won’t be available until the catalogue has an exact match.</span></div><form id='web-machine-form'><div class='field'><label>Machine name in your Garage</label><input class='input' id='web-machine-nickname' value='"+esc(machine.manufacturer+" "+machine.model)+"' maxlength='120'></div><div class='grid two'><div class='field'><label>Serial number <span class='optional'>Optional</span></label><input class='input' id='web-machine-serial' maxlength='120'></div><div class='field'><label>Asset number <span class='optional'>Optional</span></label><input class='input' id='web-machine-asset' maxlength='120'></div></div><div class='grid two'><div class='field'><label>Engine hours <span class='optional'>Optional</span></label><input class='input' id='web-machine-hours' type='number' min='0' step='.1'></div><div class='field'><label>Reel hours <span class='optional'>Optional</span></label><input class='input' id='web-machine-reel-hours' type='number' min='0' step='.1'></div></div><div class='field'><label>Notes <span class='optional'>Optional</span></label><textarea class='input' id='web-machine-notes' rows='2'></textarea></div><div class='web-add-source'><strong>Match evidence</strong><p>"+esc(machine.match_reason)+"</p><a href='"+esc(machine.source_urls?.[0]||"#")+"' target='_blank' rel='noopener noreferrer'>Open source ↗</a></div><button class='btn web-add-submit' style='width:100%;margin-top:16px'>Add to Garage as unverified</button></form></div></div>");
+  document.querySelector("#web-machine-form").addEventListener("submit",saveWebMatchedMachine);
+}
+async function saveWebMatchedMachine(e){
+  e.preventDefault();
+  if(!canOperate())return toast("Your role is read-only.");
+  const machine=state.pendingWebMachine;if(!machine)return toast("Choose a web match first.");
+  const engineHours=num("#web-machine-hours"),reelHours=num("#web-machine-reel-hours");
+  if(engineHours!=null&&engineHours<0||reelHours!=null&&reelHours<0)return toast("Hours cannot be negative.");
+  const record={id:crypto.randomUUID(),garage_id:state.garage.id,machine_variant_id:null,nickname:val("#web-machine-nickname")||machine.manufacturer+" "+machine.model,serial_number:val("#web-machine-serial")||null,asset_number:val("#web-machine-asset")||null,current_engine_hours:engineHours,current_reel_hours:reelHours,status:"ready",discovered_manufacturer:machine.manufacturer,discovered_model:machine.model,discovered_equipment_type:machine.equipment_type,discovered_match_type:machine.match_type,discovered_match_reason:machine.match_reason,discovered_evidence:machine.evidence,discovered_source_urls:machine.source_urls,discovered_image_url:machine.image_url||null,discovered_image_source_url:machine.image_source_url||null,model:{model_name:machine.model},manufacturer:{name:machine.manufacturer},variant:{variant_name:"AI web match · unverified"}};
+  if(state.demo){state.machines.unshift(record);state.pendingWebMachine=null;closeModal();toast("Web-identified mower added to Garage");return render()}
+  if(!navigator.onLine)return toast("Connect to the internet to add a web-identified machine.");
+  try{
+    const {error}=await state.client.schema("garage").rpc("create_web_discovered_machine",{
+      p_machine_id:record.id,p_garage_id:state.garage.id,
+      p_discovered_manufacturer:machine.manufacturer,p_discovered_model:machine.model,
+      p_discovered_equipment_type:machine.equipment_type||null,p_discovered_match_type:machine.match_type,
+      p_discovered_match_reason:machine.match_reason||null,p_discovered_evidence:machine.evidence||null,
+      p_discovered_source_urls:machine.source_urls,p_nickname:record.nickname,p_serial_number:record.serial_number,
+      p_asset_number:record.asset_number,p_current_engine_hours:engineHours,p_current_reel_hours:reelHours,
+      p_notes:val("#web-machine-notes")||null,p_discovered_image_url:machine.image_url||null,p_discovered_image_source_url:machine.image_source_url||null
+    });
+    if(error)throw error;
+    state.pendingWebMachine=null;closeModal();await loadMachines();toast("Web-identified mower added to Garage");render();
+  }catch(error){toast(error.message||"Could not add this mower")}
 }
 function shell(c){
   const connectionLabel=state.demo?"Demo mode":state.offline?(state.outboxCount?"Offline · "+state.outboxCount+" saved":"Offline"):connected()?"Connected":"Connect";
   const connectionClass=state.demo?"demo":state.offline?"offline":connected()?"ok":"";
   const active=state.view||"today";
   const nav=(key,label)=>"<button class='nav-link "+(active===key?"active":"")+"' data-action='"+key+"'>"+label+"</button>";
-  return "<div class='shell'><header class='topbar'><div class='brand'><span class='mark'></span>REEL<span>MOW</span></div><nav class='top-nav'>"+nav("today","Today")+nav("garage","Garage")+nav("catalogue","Catalogue")+"</nav><div class='top-actions'><button class='btn ghost small' data-action='connection'><span class='dot "+connectionClass+"'></span>"+connectionLabel+"</button>"+(state.user?"<div class='avatar'>"+esc(initials(state.user.email))+"</div>":"")+"</div></header><main class='page'>"+c+"</main><nav class='mobile-nav'>"+nav("today","Today")+nav("garage","Garage")+nav("activity","Activity")+nav("profile","Profile")+"</nav><div class='footer'>REELMOW · Field operations, under control.</div></div>"
+  return "<div class='shell'><header class='topbar'><div class='brand'><span class='mark'></span>REEL<span>MOW</span></div><nav class='top-nav'>"+nav("garage","Garage")+nav("today","Today")+nav("catalogue","Catalogue")+"</nav><div class='top-actions'><button class='btn ghost small' data-action='connection'><span class='dot "+connectionClass+"'></span>"+connectionLabel+"</button>"+(state.user?"<div class='avatar'>"+esc(initials(state.user.email))+"</div>":"")+"</div></header><main class='page'>"+c+"</main><nav class='mobile-nav'>"+nav("garage","Garage")+nav("today","Today")+nav("activity","Activity")+nav("profile","Profile")+"</nav><div class='footer'>REELMOW · Field operations, under control.</div></div>"
 }
 function mount(c){app.innerHTML="<div class='app'>"+shell(c)+"</div>"}
 function setView(view){
@@ -238,62 +292,61 @@ function actionIcon(type){
 function card(m){
   const n=m.model?.model_name||"Machine",v=m.variant?.variant_name||"Catalogue variant";
   const status=statusLabel(m.status);
-  return "<article class='card machine-card' data-action='open' data-id='"+esc(m.id)+"' tabindex='0' role='button' aria-label='Open "+esc(m.nickname||n)+"'><div class='machine-visual'><div class='glyph'>"+machineIcon()+"</div></div><div class='machine-name'>"+esc(m.nickname||n)+"</div><div class='machine-sub'>"+esc(m.manufacturer?.name||"Manufacturer")+" · "+esc(v)+"</div><div class='machine-meta'><span class='badge "+statusClass(m.status)+"'>"+esc(status)+"</span><span class='tiny'>"+(m.current_engine_hours!=null?esc(m.current_engine_hours)+" h":"No hours")+"</span></div></article>"
+  return "<article class='card machine-card' data-action='open' data-id='"+esc(m.id)+"' tabindex='0' role='button' aria-label='Open "+esc(m.nickname||n)+"'><div class='machine-visual'><div class='glyph'>"+machineIcon()+"</div></div><div class='machine-name'>"+esc(m.nickname||n)+"</div><div class='machine-sub'>"+esc(m.manufacturer?.name||"Manufacturer")+" · "+esc(v)+"</div><div class='machine-meta'><span class='badge "+statusClass(m.status)+"'>"+(m.discovered_model?"MODEL UNVERIFIED":esc(status))+"</span><span class='tiny'>"+(m.current_engine_hours!=null?esc(m.current_engine_hours)+" h":"No hours")+"</span></div></article>"
 }
 function renderToday(){
-  const serviceItems=(state.dashboardDue||[]).filter(x=>x.service_status==="due"||x.service_status==="upcoming"||x.service_status==="history_unknown");
-  const urgent=serviceItems.filter(x=>x.service_status==="due");
-  const historyUnknown=serviceItems.filter(x=>x.service_status==="history_unknown");
+  const due=(state.dashboardDue||[]).filter(x=>x.service_status==="due");
+  const unknown=(state.dashboardDue||[]).filter(x=>x.service_status==="history_unknown");
   const faults=(state.openFaults||[]).filter(x=>x.status!=="resolved");
-  const machineCount=state.machines.length;
-  const outOfService=state.machines.filter(m=>m.status==="out_of_service").length;
+  const outOfServiceMachines=state.machines.filter(m=>m.status==="out_of_service");
+  const outOfService=outOfServiceMachines.length;
   const totalHours=state.machines.reduce((sum,m)=>sum+(Number(m.current_engine_hours)||0),0);
+  const operationalAttention=due.length+faults.length+outOfService;
+  const heading=operationalAttention?"A few things need attention.":"Ready to work.";
+  const availability=state.machines.length-outOfService;
+  const hours=totalHours?Math.round(totalHours):null;
 
-  const attentionRows=[
-    ...urgent.slice(0,3).map(x=>{
-      const m=state.machines.find(v=>v.id===x.machine_id);
-      return "<button class='today-task' data-action='open' data-id='"+esc(x.machine_id)+"'><span><strong>"+esc(m?.nickname||m?.model?.model_name||"Machine")+"</strong><small>"+esc(x.task_name||"Service task")+(x.hours_remaining!=null?" · "+esc(x.hours_remaining)+" h remaining":"")+"</small></span><span class='badge service'>DUE</span></button>";
-    }),
-    ...faults.slice(0,3).map(x=>{
-      const m=state.machines.find(v=>v.id===x.machine_id);
-      return "<button class='today-task fault-task' data-action='open' data-id='"+esc(x.machine_id)+"'><span><strong>"+esc(m?.nickname||m?.model?.model_name||"Machine")+"</strong><small>"+esc(x.description)+"</small></span><span class='badge fault'>"+esc(x.severity.toUpperCase())+"</span></button>";
-    }),
-    ...historyUnknown.slice(0,2).map(x=>{
-      const m=state.machines.find(v=>v.id===x.machine_id);
-      return "<button class='today-task history-task' data-action='open' data-id='"+esc(x.machine_id)+"'><span><strong>"+esc(m?.nickname||m?.model?.model_name||"Machine")+"</strong><small>"+esc(x.task_name||"Service task")+" · Service history not recorded</small></span><span class='badge history'>UNKNOWN</span></button>";
-    })
-  ].slice(0,5).join("");
+  const actionable=[
+    ...outOfServiceMachines.slice(0,3).map(m=>({kind:"availability",machineId:m.id,title:"Machine unavailable",detail:"Out of service"})),
+    ...faults.slice(0,3).map(x=>({kind:"fault",machineId:x.machine_id,title:"Problem reported",detail:x.description||"Machine issue"})),
+    ...due.slice(0,3).map(x=>({kind:"service",machineId:x.machine_id,title:x.task_name||"Service task",detail:x.hours_remaining!=null?Math.round(Number(x.hours_remaining)*10)/10+" h remaining":"Service due"})),
+    ...unknown.slice(0,2).map(x=>({kind:"history",machineId:x.machine_id,title:x.task_name||"Service history",detail:"History not recorded"}))
+  ].slice(0,4);
 
-  const attentionBlock=attentionRows
-    ? "<section class='today-section'><div class='section-head'><div><div class='eyebrow'>Needs attention</div><h2>Deal with these first.</h2></div></div><div class='today-tasks'>"+attentionRows+"</div></section>"
-    : "<section class='today-section'><div class='calm-card card'><div class='calm-mark'>✓</div><div><strong>Nothing needs your attention.</strong><div class='tiny'>No service or machine problems currently require action.</div></div></div></section>";
+  const attention=actionable.length
+    ? "<section class='today-block today-attention-section'><div class='today-section-head'><div><div class='eyebrow'>Needs attention</div><h2>Deal with these first</h2></div><span class='count-pill'>"+actionable.length+"</span></div><div class='today-attention-list'>"+actionable.map(x=>{
+        const m=state.machines.find(v=>v.id===x.machineId);
+        const badge=x.kind==="fault"?"FAULT":x.kind==="service"?"DUE":x.kind==="availability"?"OFFLINE":"HISTORY";
+        const badgeClass=x.kind==="fault"?"fault":x.kind==="service"?"service":x.kind==="availability"?"fault":"history";
+        return "<button class='today-attention-row' data-action='open' data-id='"+esc(x.machineId)+"'><span class='attention-main'><strong>"+esc(m?.nickname||m?.model?.model_name||"Machine")+"</strong><small>"+esc(x.title)+" · "+esc(x.detail)+"</small></span><span class='badge "+badgeClass+"'>"+badge+"</span><span class='row-arrow'>›</span></button>";
+      }).join("")+"</div></section>"
+    : "";
 
-  const fleetLabel=outOfService?"Availability needs attention":"All machines available";
-  const fleetMeta=outOfService
-    ? outOfService+" machine"+(outOfService===1?" is":"s are")+" out of service"
-    : machineCount+" machine"+(machineCount===1?"":"s")+" · "+(totalHours?Math.round(totalHours)+" recorded hours":"No hours recorded");
+  const fleetRows=state.machines.length
+    ? state.machines.slice(0,3).map(m=>{
+        const status=statusLabel(m.status);
+        const statusAttention=m.status==="out_of_service";
+        return "<button class='today-machine-row' data-action='open' data-id='"+esc(m.id)+"'><span class='machine-row-icon'>"+machineIcon()+"</span><span class='machine-row-copy'><strong>"+esc(m.nickname||m.model?.model_name||"Machine")+"</strong><small>"+esc(m.manufacturer?.name||"")+" · "+esc(m.variant?.variant_name||"")+"</small></span><span class='machine-row-status'><i class='mini-status "+(statusAttention?"attention":"")+"'></i>"+esc(status)+"</span><span class='row-arrow'>›</span></button>";
+      }).join("")
+    : "<div class='today-empty-row'><strong>Add your first machine</strong><small>Build your Garage from the catalogue.</small><button class='text-button' data-action='add'>Add machine</button></div>";
 
   mount(
-    "<section class='today-hero'>"+
-      "<div><div class='eyebrow'>Today · "+esc(state.garage?.name||"Garage")+"</div><h1>Ready for the day.</h1><p class='lede' style='color:#d2e1d8'>Your machines, today's work and anything that needs attention.</p></div>"+
-      "<div class='today-status'><span class='status-dot "+(outOfService?"status-attention":"")+"'></span><div><strong>"+fleetLabel+"</strong><small>"+fleetMeta+"</small></div></div>"+
-    "</section>"+
-    quickActions()+
-    attentionBlock+
-    "<section class='today-section'><div class='section-head'><div><div class='eyebrow'>Fleet</div><h2>Your machines.</h2></div><button class='btn secondary small' data-action='garage'>View Garage</button></div><div class='today-machine-strip'>"+
-      (state.machines.length?state.machines.slice(0,4).map(card).join(""):"<div class='card empty'><h2>Start with your first machine.</h2><p class='lede'>Add the first physical asset to your Garage.</p><button class='btn' data-action='quick-add'>Add machine</button></div>")+
-    "</div></section>"
+    "<section class='today-compact'>"+
+      "<header class='today-heading'>"+
+        "<div><div class='eyebrow'>Today · "+esc(state.garage?.name||"Garage")+"</div><h1>"+heading+"</h1><p class='today-summary'>"+availability+" machine"+(availability===1?"":"s")+" available"+(hours?" · "+hours.toLocaleString()+" recorded hours":"")+"</p></div>"+
+      "</header>"+
+      "<button class='start-mow-bar' data-action='mow' aria-label='Start mowing'><span class='start-mow-icon'>"+actionIcon("mow")+"</span><span><strong>Start mowing</strong><small>Choose a machine and begin tracking</small></span><span class='row-arrow'>›</span></button>"+
+      "<section class='today-block today-actions-section'><div class='today-section-head'><div class='eyebrow'>Quick actions</div></div><div class='today-action-list'>"+
+        "<button class='today-action-row' data-action='quick-hours'><span class='today-action-icon'>"+actionIcon("hours")+"</span><span><strong>Log hours</strong><small>Update a machine meter</small></span><span class='row-arrow'>›</span></button>"+
+        "<button class='today-action-row' data-action='quick-service'><span class='today-action-icon'>"+actionIcon("service")+"</span><span><strong>Record service</strong><small>Log completed maintenance</small></span><span class='row-arrow'>›</span></button>"+
+        "<button class='today-action-row' data-action='quick-fault'><span class='today-action-icon'>"+actionIcon("fault")+"</span><span><strong>Report a problem</strong><small>Capture a machine issue</small></span><span class='row-arrow'>›</span></button>"+
+      "</div></section>"+
+      attention+
+      "<section class='today-block today-fleet-section'><div class='today-section-head'><div><div class='eyebrow'>Fleet</div><h2>Your machines</h2></div><button class='text-button' data-action='garage'>View all</button></div><div class='today-fleet-list'>"+fleetRows+"</div></section>"+
+    "</section>"
   );
 }
-function quickActions(){
-  return "<section class='quick-actions'>"+
-    "<button class='quick-action quick-mow' data-action='mow'><span class='quick-icon'>"+actionIcon("mow")+"</span><strong>Start mowing</strong><small>Choose a machine and begin tracking</small></button>"+
-    "<button class='quick-action' data-action='quick-hours'><span class='quick-icon'>"+actionIcon("hours")+"</span><strong>Log hours</strong><small>Update a machine meter</small></button>"+
-    "<button class='quick-action' data-action='quick-service'><span class='quick-icon'>"+actionIcon("service")+"</span><strong>Record service</strong><small>Log completed maintenance</small></button>"+
-    "<button class='quick-action' data-action='quick-fault'><span class='quick-icon'>"+actionIcon("fault")+"</span><strong>Report problem</strong><small>Capture a machine issue</small></button>"+
-  "</section>";
-}
-
+function quickActions(){ return ""; }
 function haversineM(a,b){
   if(!a||!b)return 0;
   const R=6371000,rad=Math.PI/180,dLat=(b.latitude-a.latitude)*rad,dLon=(b.longitude-a.longitude)*rad;
@@ -388,95 +441,98 @@ function renderGarage(){
   const list=state.machines;
   const due=state.dashboardDue||[];
   const attention=due.filter(x=>x.service_status==="due").length;
-  const upcoming=due.filter(x=>x.service_status==="upcoming").length;
   const historyUnknown=due.filter(x=>x.service_status==="history_unknown").length;
   const outOfService=list.filter(m=>m.status==="out_of_service").length;
+  const modelUnverified=list.filter(m=>!m.machine_variant_id&&m.discovered_model).length;
+  const active=list.length-outOfService;
   const totalHours=list.reduce((sum,m)=>sum+(Number(m.current_engine_hours)||0),0);
-  const attentionRows=due.filter(x=>x.service_status==="due").slice(0,5).map(x=>{
-    const m=list.find(v=>v.id===x.machine_id);
-    return `<button class="attention-row" data-action="open" data-id="${esc(x.machine_id)}"><span><strong>${esc(m?.nickname||m?.model?.model_name||"Machine")}</strong><small>${esc(x.task_name||"Service task")}</small></span><span class="badge service">DUE</span></button>`;
-  }).join("");
-  const operations=attention
-    ? `<div class="attention-list">${attentionRows}</div>`
-    : `<div class="card calm-card"><div class="calm-mark">${outOfService?"!":"✓"}</div><div><strong>No service is currently due.${outOfService?" Machine availability needs attention.":""}</strong><div class="tiny">No published service tasks require immediate action.${historyUnknown?` ${historyUnknown} ${historyUnknown===1?"task has":"tasks have"} no recorded service history.`:""}${outOfService?` ${outOfService} ${outOfService===1?"machine is":"machines are"} currently out of service.`:""}</div></div></div>`;
-  const fleet=list.length
-    ? `<div class="grid">${list.map(card).join("")}</div>`
-    : `<div class="card empty"><div class="empty-icon">⚙︎</div><h2>Your Garage is empty.</h2><p class="lede" style="margin:0 auto 18px">Start by adding a machine from the REELMOW catalogue.</p><button class="btn" data-action="add">Add your first machine</button></div>`;
-  mount(`
-    <section class="command-hero">
-      <div>
-        <div class="eyebrow">${esc(state.demo?"Demo Garage":state.org?.name||"Garage")}</div>
-        <h1>Machinery,<br>under control.</h1>
-        <p class="lede" style="color:#d2e1d8">A single operational view of your fleet, service position and machine records.</p>
-        <div class="actions" style="margin-top:23px"><button class="btn" data-action="add">＋ Add machine</button></div>
-      </div>
-      <div class="command-hero-side"><div class="hero-side-label">Fleet status</div><div class="hero-side-number">${list.length}</div><div class="hero-side-copy">machines in ${esc(state.garage?.name||"your Garage")}</div></div>
-    </section>
-    <section class="kpi-grid">
-      <div class="kpi-card"><div class="kpi-label">Fleet</div><div class="kpi-value">${list.length}</div><div class="kpi-meta">Total machines</div></div>
-      <div class="kpi-card ${attention?"alert":""}"><div class="kpi-label">Attention</div><div class="kpi-value">${attention}</div><div class="kpi-meta">Service items due</div></div>
-      <div class="kpi-card"><div class="kpi-label">Upcoming</div><div class="kpi-value">${upcoming}</div><div class="kpi-meta">Published service items</div></div>
-      <div class="kpi-card"><div class="kpi-label">Engine time</div><div class="kpi-value">${totalHours?Math.round(totalHours):"—"}</div><div class="kpi-meta">Recorded fleet hours</div></div>
-    </section>
-    <div class="section-head"><div><div class="eyebrow">Operations</div><h2>What needs attention?</h2></div><button class="btn secondary small" data-action="add">Add machine</button></div>
-    ${operations}
-    <div class="section-head"><div><div class="eyebrow">Garage</div><h2>Your machinery</h2></div></div>
-    ${fleet}
-  `);
+  const lead=list[0];
+  const leadDue=due.some(x=>x.machine_id===lead?.id&&x.service_status==="due");
+  const leadHistoryUnknown=due.some(x=>x.machine_id===lead?.id&&x.service_status==="history_unknown");
+  const leadReadiness=lead?.status==="out_of_service"?"OUT OF SERVICE":lead?.status==="retired"?"RETIRED":lead?.status==="service_due"||leadDue?"SERVICE DUE":leadHistoryUnknown?"CHECK SERVICE HISTORY":lead?.discovered_model&&!lead.machine_variant_id?"MODEL UNVERIFIED":lead?.status==="in_service"?"IN SERVICE":"READY FOR THE FIELD";
+  const leadCanMow=["ready","in_service"].includes(lead?.status);
+  const leadMowAction=leadCanMow?"<button class='garage-action-primary' data-action='garage-mow' data-id='"+esc(lead.id)+"'><span class='mow-icon'>↗</span><span>Start mowing</span></button>":"<button class='garage-action-primary' disabled aria-label='Mowing unavailable while machine is "+esc(leadReadiness.toLowerCase())+"'><span class='mow-icon'>↗</span><span>Unavailable</span></button>";
+  const leadHours=lead?.current_engine_hours!=null?Number(lead.current_engine_hours):null;
+  const leadModel=lead?.model?.model_name||lead?.variant?.variant_name||"Machine";
+  const leadName=lead?.nickname||leadModel;
+  const leadIdentity=[lead?.manufacturer?.name,lead?.discovered_model?"AI WEB MATCH · UNVERIFIED":lead?.variant?.variant_name||leadModel].filter(Boolean).join(" · ");
+  const isJacobsenLF3800=/jacobsen/i.test(lead?.manufacturer?.name||"")&&/lf\s*3800/i.test(leadModel+" "+(lead?.variant?.variant_name||""));
+
+  if(!list.length){
+    mount("<section class='garage-empty-page'><div class='garage-kicker'>"+esc(state.demo?"Demo Garage":state.garage?.name||"Garage")+"</div><h1>The Garage.</h1><p>Every machine, ready for the work ahead.</p><button class='garage-primary-action' data-action='add'>Add your first machine <span>→</span></button></section>");
+    return;
+  }
+
+  const attentionCopy=[
+    outOfService?outOfService+" unavailable":"",
+    attention?attention+" service due":"",
+    historyUnknown?historyUnknown+" history unknown":"",
+    modelUnverified?modelUnverified+" model unverified":""
+  ].filter(Boolean).join(" · ")||"All machines ready";
+  const shortAttentionCopy=[
+    outOfService?outOfService+" off":"",
+    attention?attention+" due":"",
+    historyUnknown?historyUnknown+" check":"",
+    modelUnverified?modelUnverified+" verify":""
+  ].filter(Boolean).join(" · ")||"Ready";
+
+  mount(
+    "<section class='garage-page'>"+
+      "<header class='garage-header'>"+
+        "<div><div class='garage-kicker'>"+esc(state.demo?"DEMO · "+(state.garage?.name||"MAIN GARAGE"):state.garage?.name||"MAIN GARAGE")+"</div><h1>The Garage<span>.</span></h1></div>"+
+        "<div class='garage-header-meta'><span class='garage-status-label "+((outOfService||attention||historyUnknown)?"warning":"")+"' aria-label='"+esc(attentionCopy)+"'><span class='garage-live-dot'></span><span class='garage-status-full'>"+esc(attentionCopy)+"</span><span class='garage-status-short'>"+esc(shortAttentionCopy)+"</span></span><button class='garage-add-link' data-action='add' aria-label='Add machine'><span class='garage-add-icon'>＋</span><span>Add machine</span></button></div>"+
+      "</header>"+
+      "<section class='garage-hero' aria-label='Featured machine: "+esc(leadName)+"'>"+
+        "<div class='garage-hero-photo"+(isJacobsenLF3800?" concept-photo":"")+"' data-garage-photo='"+esc(lead.id)+"'>"+(isJacobsenLF3800?"<img src='./assets/garage-hero-concept.jpg' alt='Illustrative five-gang reel mower in a modern machinery garage' fetchpriority='high'>":lead.discovered_image_url?"<img src='"+esc(lead.discovered_image_url)+"' alt='"+esc(lead.discovered_manufacturer+" "+lead.discovered_model+" manufacturer reference image")+"' fetchpriority='high'>":"<div class='garage-photo-placeholder'>"+machineIcon()+"</div>")+"</div>"+
+        "<div class='garage-hero-shade'></div>"+
+        "<div class='garage-hero-content'>"+
+          "<div class='garage-hero-top'><div class='garage-hero-index'><span class='garage-index-mark'>01</span><span class='garage-eyebrow'>"+esc(leadIdentity)+"</span></div><span class='garage-status-chip "+(leadReadiness.startsWith("READY")?"":lead.status==="in_service"?"working":"attention")+"'><i></i>"+esc(leadReadiness)+"</span></div>"+
+          "<div class='garage-hero-bottom'>"+
+            "<div class='garage-machine-title'><div class='garage-title-overline'>YOUR MACHINE <span>•</span> "+esc(leadReadiness)+"</div><h2>"+esc(leadName)+"</h2><p>"+esc(leadModel)+"</p></div>"+
+            "<div class='garage-hero-actions'><div class='garage-hours'><strong>"+(leadHours!=null?leadHours.toLocaleString():"—")+"</strong><span>ENGINE HOURS</span></div>"+leadMowAction+"<button class='garage-action-secondary' data-action='open' data-id='"+esc(lead.id)+"'>Machine details <span>↗</span></button></div>"+
+          "</div>"+
+        "</div>"+
+        "<div class='garage-photo-note'>GARAGE SERIES <span>"+(lead?.discovered_model?"AI WEB MATCH · UNVERIFIED":"01 / VISUAL CONCEPT")+"</span></div>"+
+      "</section>"+
+      "<section class='garage-summary'>"+
+        "<div><span>In your Garage</span><strong>"+String(list.length).padStart(2,"0")+"</strong><small>machines</small></div>"+
+        "<div><span>Ready to work</span><strong>"+String(active).padStart(2,"0")+"</strong><small>available now</small></div>"+
+        "<div><span>Total engine time</span><strong>"+(totalHours?Math.round(totalHours).toLocaleString():"—")+"</strong><small>hours recorded</small></div>"+
+        "<div class='"+((historyUnknown||attention||modelUnverified)?"has-warning":"")+"'><span>Service status</span><strong>"+(attention?String(attention).padStart(2,"0"):historyUnknown||modelUnverified?"Check":"Clear")+"</strong><small>"+(modelUnverified?modelUnverified+" model unverified":historyUnknown?historyUnknown+" history unknown":attention?"items due":"all machines up to date")+"</small></div>"+
+      "</section>"+
+      (list.length>1?"<section class='garage-collection'><div class='garage-section-heading'><div><span class='garage-kicker'>Equipment</span><h2>The Garage</h2></div><span>"+list.length+" assets</span></div><div class='garage-machine-grid'>"+list.slice(1).map(m=>{
+        const hrs=m.current_engine_hours!=null?Number(m.current_engine_hours).toLocaleString()+" h":"Hours not recorded";
+        return "<article class='garage-machine-tile' data-action='open' data-id='"+esc(m.id)+"'><div class='garage-tile-photo' data-garage-photo='"+esc(m.id)+"'>"+(m.discovered_image_url?"<img src='"+esc(m.discovered_image_url)+"' alt='"+esc(m.discovered_manufacturer+" "+m.discovered_model+" manufacturer reference image")+"' loading='lazy'>":"<div class='garage-photo-placeholder'>"+machineIcon()+"</div>")+"</div><div class='garage-tile-overlay'></div><div class='garage-tile-content'><span>"+esc(m.manufacturer?.name||"Machine")+"</span><h3>"+esc(m.nickname||m.model?.model_name||"Machine")+"</h3><small>"+(m.discovered_model?"MODEL UNVERIFIED":esc(statusLabel(m.status)))+" · "+hrs+"</small></div></article>";
+      }).join("")+"</div></section>":"")+
+      "<section class='garage-quick'><div class='garage-section-heading'><div><span class='garage-kicker'>Keep things moving</span><h2>Workshop</h2></div><span>FIELD TOOLS</span></div><div class='garage-quick-links'><button data-action='quick-hours'><i>◷</i><span><b>Log hours</b><small>Update a machine meter</small></span><em>↗</em></button><button data-action='quick-service'><i>⌁</i><span><b>Record service</b><small>Keep maintenance current</small></span><em>↗</em></button><button data-action='quick-fault'><i>＋</i><span><b>Report a problem</b><small>Flag an issue for the team</small></span><em>↗</em></button></div></section>"+
+    "</section>"
+  );
+  loadGaragePhotos(list);
+}
+async function loadGaragePhotos(machines){
+  if(state.demo)return;
+  const ids=machines.map(m=>m.id).filter(Boolean);
+  if(!ids.length)return;
+  const {data,error}=await state.client.schema("garage").from("machine_photos").select("machine_id,storage_bucket,storage_path,caption,created_at").in("machine_id",ids).order("created_at",{ascending:false});
+  if(error)return;
+  const latest=new Map();
+  for(const p of data||[])if(!latest.has(p.machine_id))latest.set(p.machine_id,p);
+  for(const [id,p] of latest){
+    const signed=await state.client.storage.from(p.storage_bucket).createSignedUrl(p.storage_path,3600);
+    if(signed.error)continue;
+    const el=document.querySelector("[data-garage-photo='"+CSS.escape(id)+"']");
+    if(el){el.innerHTML="<img src='"+esc(signed.data.signedUrl)+"' alt='"+esc(p.caption||"Machine photo")+"' loading='eager'>";if(id===machines[0]?.id){const note=document.querySelector(".garage-photo-note span");if(note)note.textContent="01 / MACHINE PHOTO"}}
+  }
 }
 
 function renderDetail(){
   const m=state.selected;
   const pending=readOutbox().filter(x=>x.payload?.machineId===m.id).length;
-  mount("<div class='breadcrumb'><button class='back' data-action='back'>← Garage</button><span>/</span><span>Machine profile</span></div><section class='detail-head'><div class='machine-title'><div class='machine-title-icon'>⚙︎</div><div><div class='eyebrow'>"+esc(m.manufacturer?.name||"Manufacturer")+"</div><h1 style='font-size:38px;margin-bottom:5px'>"+esc(m.nickname||m.model?.model_name||"Machine")+"</h1><p class='muted'>"+esc(m.variant?.variant_name||"Variant")+"</p></div></div><div class='actions'><button class='badge "+statusClass(m.status)+"' data-action='status'>"+esc(statusLabel(m.status))+" · Change</button></div></section><div class='detail-grid'><div><div class='card'><div class='section-head' style='margin:0 0 12px'><div><div class='eyebrow'>Machine health</div><h2>At a glance</h2></div><button class='btn secondary small' data-action='edit'>Edit</button></div><div class='metric-row'><div class='metric'><div class='num'>"+(m.current_engine_hours??"—")+"</div><div class='label'>Engine hours</div></div><div class='metric'><div class='num'>"+(m.current_reel_hours??"—")+"</div><div class='label'>Reel hours</div></div></div><div class='actions' style='margin-top:14px'><button class='btn small' data-action='hours'>Update hours</button><button class='btn secondary small' data-action='service'>Record service</button></div><div class='list'><div class='list-row'><div><div class='list-title'>Serial number</div><div class='list-meta'>"+esc(m.serial_number||"Not recorded")+"</div></div></div><div class='list-row'><div><div class='list-title'>Asset number</div><div class='list-meta'>"+esc(m.asset_number||"Not recorded")+"</div></div></div><div class='list-row'><div><div class='list-title'>Purchase date</div><div class='list-meta'>"+esc(m.purchase_date||"Not recorded")+"</div></div></div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Service status</div><h2>What needs doing?</h2><div id='service-due'><div class='loading'><div class='spinner'></div>Checking service schedule…</div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Catalogue specifications</div><h2>Known machine data</h2><div id='specs'><div class='loading'><div class='spinner'></div>Loading verified specifications…</div></div></div></div><div><div class='card'><div class='eyebrow'>Service history</div><h2>Recent work</h2><div id='service-history'><div class='loading'><div class='spinner'></div>Loading service history…</div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Faults & repairs</div><h2>Problems and resolution</h2><div class='actions' style='margin:10px 0'><button class='btn secondary small' data-action='fault'>Report problem</button></div><div id='machine-faults'><div class='loading'><div class='spinner'></div>Loading fault history…</div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Documents</div><h2>Machine knowledge</h2><div class='actions' style='margin:10px 0'><button class='btn secondary small' data-action='document-upload'>Add document</button></div><div id='machine-documents'><div class='loading'><div class='spinner'></div>Loading documents…</div></div></div><div class='card' style='margin-top:15px'><div class='eyebrow'>Photos</div><h2>Machine evidence</h2><div class='actions' style='margin:10px 0'><button class='btn secondary small' data-action='photo-upload'>Take / add photo</button></div><div id='machine-photos'><div class='loading'><div class='spinner'></div>Loading photos…</div></div></div></div></div>"+(pending?"<div class='note' style='margin:0 0 15px'><b>"+pending+" change"+(pending===1?"":"s")+" saved on this device.</b> It will sync automatically when online.</div>":""));
-  loadSpecs(m);loadServiceData(m);loadEvidence(m);loadMachineFaults(m)
-}
-function canOperate(){return state.demo||["owner","admin","manager","operator"].includes(state.role)}
-function canEditMachine(){return canOperate()}
-function canChangeStatus(){return canOperate()}
-function statusLabel(status){return String(status||"ready").replaceAll("_"," ").replace(/\b\w/g,c=>c.toUpperCase())}
-function statusClass(status){return status==="service_due"||status==="out_of_service"?"service":status==="in_service"?"fault":status==="retired"?"retired":"ready"}
-function faultHtml(){
-  if(!state.machineFaults.length)return "<div class='empty-mini'><div class='tiny'>No reported problems.</div></div>";
-  return "<div class='list'>"+state.machineFaults.map(x=>{
-    const actions=x.status==="open"
-      ?"<button class='btn ghost small' data-action='ack-fault' data-id='"+esc(x.id)+"'>Acknowledge</button>"
-      :x.status==="acknowledged"
-        ?"<button class='btn ghost small' data-action='resolve-fault' data-id='"+esc(x.id)+"'>Resolve</button>"
-        :"<span class='badge ready'>RESOLVED</span>";
-    return "<div class='list-row fault-row'><div><div class='list-title'>"+esc(x.severity.toUpperCase())+" · "+esc(x.status.replace("_"," "))+"</div><div class='list-meta'>"+esc(new Date(x.reported_at).toLocaleDateString())+" · "+esc(x.description)+"</div>"+(x.resolution_notes?"<div class='list-meta' style='margin-top:4px'>"+esc(x.resolution_notes)+"</div>":"")+"</div><div class='actions'>"+actions+"</div></div>";
-  }).join("")+"</div>";
-}
-async function loadMachineFaults(m){
-  if(state.demo){state.machineFaults=[]}
-  else{
-    const {data,error}=await state.client.schema("garage").from("machine_faults").select("id,severity,status,description,reported_at,resolved_at,resolution_notes").eq("machine_id",m.id).order("reported_at",{ascending:false}).limit(20);
-    if(error)return toast(error.message);
-    state.machineFaults=data||[];
-  }
-  const box=document.querySelector("#machine-faults");if(box)box.innerHTML=faultHtml();
-}
-function acknowledgeFault(id){
-  const fault=state.machineFaults.find(x=>x.id===id);if(!fault)return;
-  if(state.demo){fault.status="acknowledged";closeModal();toast("Problem acknowledged");return renderDetail()}
-  (async()=>{
-    try{
-      const {error}=await state.client.schema("garage").rpc("acknowledge_machine_fault",{p_fault_id:id,p_notes:"Acknowledged in Garage"});
-      if(error)throw error;
-      await loadMachines();state.selected=state.machines.find(x=>x.id===state.selected.id)||state.selected;await loadMachineFaults(state.selected);closeModal();toast("Problem acknowledged");renderDetail();
-    }catch(x){toast(x.message||"Could not acknowledge problem")}
-  })();
-}
-function resolveFaultModal(id){
-  const fault=state.machineFaults.find(x=>x.id===id);if(!fault)return;
-  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Resolve issue</div><h2>Return the machine to repair complete.</h2><p class='tiny'>Record what was repaired, adjusted or checked. The machine will move to Repaired.</p></div><button class='close' data-action='close'>×</button></div><form id='resolve-form'><div class='field'><label>Resolution notes</label><textarea class='input' id='resolution-notes' rows='4' required placeholder='What was repaired, adjusted or checked?'></textarea></div><button class='btn' style='width:100%'>Mark repaired</button></form></div></div>");
-  document.querySelector("#resolve-form").addEventListener("submit",async e=>{
-    e.preventDefault();const notes=val("#resolution-notes");if(!notes){toast("Resolution notes are required");return}
-    if(state.demo){fault.status="resolved";fault.resolution_notes=notes;fault.resolved_at=new Date().toISOString();state.selected.status="repaired";closeModal();toast("Problem resolved");return renderDetail()}
-    try{
-      const {error}=await state.client.schema("garage").rpc("resolve_machine_fault",{p_fault_id:id,p_resolution_notes:notes});
-      if(error)throw error;
-      closeModal();await loadMachines();state.selected=state.machines.find(x=>x.id===state.selected.id)||state.selected;await loadMachineFaults(state.selected);toast("Problem resolved — machine is repaired");renderDetail();
+  const webIdentityNote=m.discovered_model?"<div class='web-identity-notice'><div><b>AI web match · not catalogue verified</b><span>Saved from a public product source. REELMOW has not verified its identity or specifications.</span></div><p>"+esc(m.discovered_match_reason||"")+" "+esc(m.discovered_evidence||"")+"</p><div>"+(m.discovered_source_urls||[]).map((url,i)=>"<a href='"+esc(url)+"' target='_blank' rel='noopener noreferrer'>Source "+(i+1)+" ↗</a>").join("")+"</div><small>No model-specific service schedule or verified specifications are attached yet.</small></div>":"";
+  mount("<div class='machine-page'>"+
+    "<div class='machine-back'><button class='back' data-action='back'>← Garage</button></div>"+
+    "<section class='machine-hero-compact'>"+
+      "<div class='machine-identity'><div class='machine-hero-icon'>"+machineIcon()+"</div><div><div class='eyebrow'>"+esc(m.manufacturer?.name||"Manufacturer")+" · "+esc(m.variant?.var…1963 tokens truncated…id===state.selected.id)||state.selected;await loadMachineFaults(state.selected);toast("Problem resolved — machine is repaired");renderDetail();
     }catch(x){toast(x.message||"Could not resolve problem")}
   });
 }
@@ -502,7 +558,8 @@ function specsHtml(){
   return "<div class='spec-grid'>"+state.specs.map(s=>"<div class='spec'><div class='v'>"+esc(s.value_text??s.value_number??"—")+(s.unit?" "+esc(s.unit):"")+"</div><div class='k'>"+esc(s.label)+"</div></div>").join("")+"</div>"
 }
 async function loadSpecs(m){
-  if(state.demo){state.specs=[{label:"Cutting width",value_number:2.54,unit:"m"},{label:"Number of reels",value_number:5,unit:"count"},{label:"Reel diameter",value_number:178,unit:"mm"},{label:"Reel width",value_number:559,unit:"mm"},{label:"Minimum height of cut",value_number:9.5,unit:"mm"},{label:"Maximum height of cut",value_number:29,unit:"mm"},{label:"Reel blades",value_text:"9 or 11"},{label:"Fuel",value_text:"Diesel"},{label:"Engine",value_text:"Kubota"}]}
+  if(m.discovered_model&&!m.machine_variant_id){state.specs=[]}
+  else if(state.demo){state.specs=[{label:"Cutting width",value_number:2.54,unit:"m"},{label:"Number of reels",value_number:5,unit:"count"},{label:"Reel diameter",value_number:178,unit:"mm"},{label:"Reel width",value_number:559,unit:"mm"},{label:"Minimum height of cut",value_number:9.5,unit:"mm"},{label:"Maximum height of cut",value_number:29,unit:"mm"},{label:"Reel blades",value_text:"9 or 11"},{label:"Fuel",value_text:"Diesel"},{label:"Engine",value_text:"Kubota"}]}
   else{const {data,error}=await state.client.schema("catalogue").from("facts").select("value_text,value_number,unit,spec_definition_id").eq("machine_model_id",m.model.id).eq("status","active");if(error)return toast(error.message);const ids=(data||[]).map(x=>x.spec_definition_id);const {data:d,error:de}=ids.length?await state.client.schema("catalogue").from("spec_definitions").select("id,label").in("id",ids):{data:[]};if(de)return toast(de.message);const map=new Map((d||[]).map(x=>[x.id,x.label]));state.specs=(data||[]).map(x=>({...x,label:map.get(x.spec_definition_id)||"Specification"}))}
   const box=document.querySelector("#specs");if(box)box.innerHTML=state.specs.length?specsHtml():"<p class='tiny'>No verified specifications available.</p>"
 }
@@ -517,7 +574,7 @@ function photosHtml(){
 async function loadEvidence(m){
   state.machineDocuments=[];state.machinePhotos=[];
   if(state.demo){
-    state.machineDocuments=[{id:"demo-manual",title:"Jacobsen LF3800 Operator Manual",document_type:"operator_manual",source:"manufacturer"}];
+    state.machineDocuments=m.discovered_model?[]:[{id:"demo-manual",title:"Jacobsen LF3800 Operator Manual",document_type:"operator_manual",source:"manufacturer"}];
     state.machinePhotos=[];
   }else{
     const [d,p]=await Promise.all([
@@ -581,17 +638,21 @@ async function openDocument(id){
   window.open(data.signedUrl,"_blank","noopener,noreferrer")
 }
 function serviceDueHtml(){
-  if(!state.serviceDue.length)return "<div class='empty-mini'><div class='tiny'>No published service schedule for this machine yet.</div><div class='tiny' style='margin-top:5px'>REELMOW only shows maintenance rules that have been sourced and validated.</div></div>";
-  return "<div class='list'>"+state.serviceDue.map(x=>{
-    const due=x.service_status==="due";
-    const unknown=x.service_status==="history_unknown";
+  if(!state.serviceDue.length)return state.selected?.discovered_model?"<div class='next-empty'>No model-specific schedule yet. Verify this mower against its plate or add an exact catalogue match.</div>":"<div class='next-empty'>No published service schedule.</div>";
+  const ordered=[...state.serviceDue].sort((a,b)=>{
+    const rank=x=>x.service_status==="due"?0:x.service_status==="history_unknown"?1:2;
+    return rank(a)-rank(b);
+  });
+  const visible=ordered.slice(0,3);
+  return "<div class='next-list'>"+visible.map(x=>{
+    const due=x.service_status==="due",unknown=x.service_status==="history_unknown";
     const remaining=x.hours_remaining!=null?Math.round(Number(x.hours_remaining)*10)/10:null;
     const date=x.calendar_due_date;
-    const detail=unknown?"Service history not recorded":remaining!=null?(remaining<=0?"Due now":remaining+" engine hours remaining"):(date?("Due "+date):"Schedule published");
+    const detail=unknown?"History not recorded":remaining!=null?(remaining<=0?"Due now":remaining+" engine hours remaining"):(date?"Due "+date:"Schedule published");
     const badgeClass=due?"service":unknown?"history":"ready";
-    const badgeLabel=due?"DUE":unknown?"HISTORY NOT RECORDED":"UPCOMING";
-    return "<button class='list-row service-task-row' data-action='service-task' data-id='"+esc(x.service_task_id||"")+"' style='width:100%;text-align:left;background:none;border:0;cursor:pointer'><div><div class='list-title'>"+esc(x.task_name)+"</div><div class='list-meta'>"+esc(detail)+(date&&!unknown&&remaining!=null?" · "+esc(date):"")+(x.source_page?" · Manual p."+esc(x.source_page):"")+"</div></div><span class='badge "+badgeClass+"'>"+badgeLabel+"</span></button>"
-  }).join("")+"</div>"
+    const badgeLabel=due?"DUE":unknown?"HISTORY UNKNOWN":"UPCOMING";
+    return "<button class='next-row' data-action='service-task' data-id='"+esc(x.service_task_id||"")+"'><span><strong>"+esc(x.task_name)+"</strong><small>"+esc(detail)+"</small></span><span class='badge "+badgeClass+"'>"+badgeLabel+"</span><span class='row-arrow'>›</span></button>";
+  }).join("")+"</div>"+(ordered.length>3?"<div class='next-more'>"+(ordered.length-3)+" more maintenance item"+(ordered.length-3===1?"":"s")+" available below.</div>":"");
 }
 function serviceTaskModal(taskId){
   const x=state.serviceDue.find(v=>v.service_task_id===taskId);
@@ -609,14 +670,8 @@ function serviceHistoryHtml(){
 }
 async function loadServiceData(m){
   if(state.demo){
-    state.serviceDue=[
-      {task_name:"Engine oil change",service_status:"due",hours_remaining:-4.5,source_page:16},
-      {task_name:"Lubricate F1 grease points",service_status:"upcoming",hours_remaining:15.5,source_page:28},
-      {task_name:"Lubricate F2 grease points",service_status:"upcoming",hours_remaining:115.5,source_page:28},
-      {task_name:"Lubricate F3 grease points",service_status:"upcoming",hours_remaining:215.5,source_page:28},
-      {task_name:"Inspect fuel lines and clamps",service_status:"upcoming",hours_remaining:15.5,source_page:17}
-    ];
-    state.serviceRecords=[{task_name:"Engine oil change",serviced_at:"2026-08-14T10:00:00Z",engine_hours:1180,cost:94.5,notes:"Oil and filter replaced."}];
+    state.serviceDue=m.discovered_model&&!m.machine_variant_id?[]:demoServiceDue(m.id);
+    state.serviceRecords=m.discovered_model&&!m.machine_variant_id?[]:[{task_name:"Engine oil change",serviced_at:"2026-08-14T10:00:00Z",engine_hours:1180,cost:94.5,notes:"Oil and filter replaced."}];
   }else{
     const [due,rec]=await Promise.all([
       state.client.schema("garage").from("machine_service_due").select("*").eq("machine_id",m.id).order("service_status").order("task_name"),
@@ -633,6 +688,17 @@ async function loadServiceData(m){
   }
   const dueBox=document.querySelector("#service-due");if(dueBox)dueBox.innerHTML=serviceDueHtml();
   const hist=document.querySelector("#service-history");if(hist)hist.innerHTML=serviceHistoryHtml();
+  const dueCount=document.querySelector("#machine-due-count");if(dueCount){const active=state.serviceDue.filter(x=>x.service_status==="due").length;const unknown=state.serviceDue.filter(x=>x.service_status==="history_unknown").length;dueCount.textContent=m.discovered_model&&!m.machine_variant_id?"No model plan":active?active+" due":unknown?unknown+" unknown":"Up to date";}
+}
+
+function demoServiceDue(machineId){
+  return [
+    {machine_id:machineId,task_name:"Engine oil change",service_status:"due",hours_remaining:-4.5,source_page:16},
+    {machine_id:machineId,task_name:"Lubricate F1 grease points",service_status:"upcoming",hours_remaining:15.5,source_page:28},
+    {machine_id:machineId,task_name:"Lubricate F2 grease points",service_status:"upcoming",hours_remaining:115.5,source_page:28},
+    {machine_id:machineId,task_name:"Lubricate F3 grease points",service_status:"upcoming",hours_remaining:215.5,source_page:28},
+    {machine_id:machineId,task_name:"Inspect fuel lines and clamps",service_status:"upcoming",hours_remaining:15.5,source_page:17}
+  ];
 }
 function hoursModal(){
   const m=state.selected;
@@ -689,8 +755,9 @@ async function saveService(e){
   }catch(x){toast(x.message||"Could not save service record")}
 }
 function addModal(){
-  modal("<div class='modal-backdrop'><div class='modal'><div class='modal-head'><div><div class='eyebrow'>Add machine</div><h2>Find it in the catalogue.</h2><p class='tiny'>Search manufacturer, model or variant.</p></div><button class='close' data-action='close'>×</button></div><div class='search-wrap'><span class='search-icon'>⌕</span><input id='q' class='search' placeholder='Search manufacturer or model…'></div><div class='quick-searches'><button class='chip' data-search='LF3800'>Jacobsen LF3800</button><button class='chip' data-search='SC610'>Protea SC610</button><button class='chip' data-search='Shaver 24'>Allett Shaver 24</button><button class='chip' data-search='Royale 24'>ATCO Royale 24</button></div><div id='results' class='result-list'><p class='tiny'>Start typing, or choose a machine above.</p></div><div class='catalogue-help'><b>Can’t find your machine?</b><span>Scan the model plate and use the result to search the catalogue.</span><button class='btn secondary small' data-action='unknown-machine'>Scan plate</button></div></div></div>");
-  const q=document.querySelector("#q");let t;q.addEventListener("input",()=>{clearTimeout(t);t=setTimeout(()=>search(q.value),220)});
+  state.webResults=[];state.webCitations=[];state.webResearchCaveat="";
+  modal("<div class='modal-backdrop'><div class='modal discovery-modal'><div class='modal-head'><div><div class='eyebrow'>Find equipment</div><h2>Find the right machine.</h2><p class='tiny'>Search the verified catalogue first. If it’s missing, AI finds the closest real model online.</p></div><button class='close' data-action='close'>×</button></div><div class='discovery-tabs'><button class='discovery-tab active' data-action='catalogue-search-tab'>Catalogue</button><button class='discovery-tab' data-action='web-search-tab'>AI web matches <span>NEW</span></button></div><div class='search-wrap'><span class='search-icon'>⌕</span><input id='q' class='search' placeholder='Try Allett Regal 36' autocomplete='off' aria-label='Search manufacturer and model'></div><section class='discovery-pane' id='catalogue-pane'><div class='quick-searches'><button class='chip' data-search='LF3800'>Jacobsen LF3800</button><button class='chip' data-search='SC610'>Protea SC610</button><button class='chip' data-search='Allett Regal 36'>Allett Regal 36</button><button class='chip' data-search='ATCO Royale 24'>ATCO Royale 24</button></div><div id='results' class='result-list'><p class='tiny'>Enter the name from the machine or its plate.</p></div><div class='catalogue-help'><b>Have the machine with you?</b><span>Scan its model plate and check the exact catalogue match.</span><button class='btn secondary small' data-action='unknown-machine'>Scan plate</button></div></section><section class='discovery-pane' id='web-pane' hidden><div class='research-intro'><div class='eyebrow'>AI-powered machine matching</div><p>Search the web for the name you entered. We’ll rank exact models first, show close alternatives, and link the evidence.</p></div><button class='btn research-search-button' data-action='web-search'>"+(state.demo?"Show example match":"Find closest matches online")+" <span>↗</span></button><div id='web-results' class='web-results'><p class='tiny'>Type a manufacturer and model, such as <b>Allett Regal 36</b>, then find online matches.</p></div><div class='research-footnote'>Web matches are suggestions. Confirm the exact machine in the verified catalogue before adding it to your Garage.</div></section></div></div>");
+  const q=document.querySelector("#q");let t;q.addEventListener("input",()=>{if(document.querySelector("#web-pane")?.hidden){clearTimeout(t);t=setTimeout(()=>search(q.value),220)}});
   document.querySelectorAll("[data-search]").forEach(b=>b.addEventListener("click",()=>{q.value=b.dataset.search;search(q.value)}));
   q.focus()
 }
@@ -920,7 +987,8 @@ function connectionModal(){
 function loadDemo(){
   state.org={id:"demo-org",name:"Barton Town Cricket Club",slug:"barton-town-cricket-club"};
   state.garage={id:"demo-garage",name:"Main Garage",location_name:"Club Grounds"};
-  if(!state.machines.length)state.machines=[{id:"demo-lf3800",garage_id:"demo-garage",machine_variant_id:demoCatalogue[0].variant_id,serial_number:"DEMO-LF3800",asset_number:"BTCC-001",nickname:"Main Outfield Mower",purchase_date:"2025-03-14",current_engine_hours:1284.5,current_reel_hours:642.2,status:"ready",variant:{variant_name:"LF3800 5-Gang"},model:{model_name:"LF3800"},manufacturer:{name:"Jacobsen"}}]
+  if(!state.machines.length)state.machines=[{id:"demo-lf3800",garage_id:"demo-garage",machine_variant_id:demoCatalogue[0].variant_id,serial_number:"DEMO-LF3800",asset_number:"BTCC-001",nickname:"Main Outfield Mower",purchase_date:"2025-03-14",current_engine_hours:1284.5,current_reel_hours:642.2,status:"ready",variant:{variant_name:"LF3800 5-Gang"},model:{model_name:"LF3800"},manufacturer:{name:"Jacobsen"}}];
+  state.dashboardDue=demoServiceDue("demo-lf3800");
 }
 document.addEventListener("keydown",e=>{
   if(e.key!=="Enter"&&e.key!==" ")return;
@@ -938,6 +1006,8 @@ document.addEventListener("click",e=>{
   if(x==="quick-service")return machinePicker("service");
   if(x==="quick-fault")return machinePicker("fault");
   if(x==="mow"){return machinePicker("mow")}
+    if(x==="machine-mow"){return startMow(state.selected?.id)}
+  if(x==="garage-mow"){state.selected=state.machines.find(v=>v.id===a.dataset.id)||null;return startMow(state.selected?.id)}
   if(x==="mow-pause")return pauseMow();
   if(x==="mow-stop")return finishMow();
   if(x==="exit-mow")return exitMow();
@@ -957,6 +1027,27 @@ document.addEventListener("click",e=>{
   if(x==="demo"){state.demo=true;localStorage.setItem(DEMO_KEY,"true");loadDemo();closeModal();return render()}
   if(x==="close")return closeModal();
   if(x==="add"){state.catalogueResults=[];return addModal()}
+  if(x==="catalogue-search-tab"||x==="web-search-tab"){
+    const web=x==="web-search-tab";document.querySelector("#catalogue-pane")?.toggleAttribute("hidden",web);document.querySelector("#web-pane")?.toggleAttribute("hidden",!web);
+    document.querySelectorAll(".discovery-tab").forEach(b=>b.classList.toggle("active",b.dataset.action===x));
+    if(web){const q=document.querySelector("#q");const button=document.querySelector("[data-action='web-search']");if(button)button.innerHTML=(state.demo?"Show example match":"Find closest matches online")+" <span>↗</span>";if(q?.value.trim()&&!state.webResults.length)searchGroundsWeb(q.value)}return;
+  }
+  if(x==="web-search"||x==="search-web-query"){
+    const query=a.dataset.query||document.querySelector("#q")?.value||"";
+    if(x==="search-web-query"){
+      const q=document.querySelector("#q");if(q)q.value=query;
+      document.querySelector("#catalogue-pane")?.setAttribute("hidden","");document.querySelector("#web-pane")?.removeAttribute("hidden");
+      document.querySelectorAll(".discovery-tab").forEach(b=>b.classList.toggle("active",b.dataset.action==="web-search-tab"));
+    }
+    return searchGroundsWeb(query);
+  }
+  if(x==="search-web-result"){
+    const query=a.dataset.query||"";
+    document.querySelector("#catalogue-pane")?.removeAttribute("hidden");document.querySelector("#web-pane")?.setAttribute("hidden","");
+    document.querySelectorAll(".discovery-tab").forEach(b=>b.classList.toggle("active",b.dataset.action==="catalogue-search-tab"));
+    const q=document.querySelector("#q");if(q&&query){q.value=query;search(query)}return;
+  }
+  if(x==="add-web-machine"){return addWebMatchedMachine(state.webResults[Number(a.dataset.index)])}
   if(x==="select"){const r=state.catalogueResults.find(v=>v.variant_id===a.dataset.id);if(r)machineModal(r);return}
   if(x==="accept-identified"){
     const pending=state.pendingIdentification,candidates=pending?.candidates||[],r=candidates[Number(a.dataset.index)];

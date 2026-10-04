@@ -27,3 +27,7 @@ additional_redirect_urls = ["http://localhost:3000"]
 
 [analytics]
 enabled = false
+
+[functions.discover-grounds-machines]
+# The function validates the user's session with Supabase Auth in-handler.
+verify_jwt = false

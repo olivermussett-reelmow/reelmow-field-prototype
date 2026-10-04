@@ -1,6 +1,6 @@
-const VERSION="20260927-ux1";
+const VERSION="20261004-machine-images-1";
 const CACHE="reelmow-shell-"+VERSION;
-const ASSETS=["./","./index.html","./styles.css","./app.js","./manifest.webmanifest","./icon.svg"];
+const ASSETS=["./","./index.html","./styles.css","./app.js","./manifest.webmanifest","./icon.svg","./assets/garage-hero-concept.jpg"];
 
 self.addEventListener("install",event=>{
   event.waitUntil(

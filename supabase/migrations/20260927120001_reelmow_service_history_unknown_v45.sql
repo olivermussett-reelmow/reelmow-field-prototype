@@ -46,7 +46,7 @@ SELECT
     )
   END AS hours_remaining,
   min(CASE
-    WHEN sr.interval_calendar_days IS NOT NULL THEN (COALESCE(ls.serviced_at, m.created_at) + make_interval(days => min(sr.interval_calendar_days)))::date
+    WHEN sr.interval_calendar_days IS NOT NULL THEN (COALESCE(ls.serviced_at, m.created_at) + make_interval(days => sr.interval_calendar_days))::date
     ELSE NULL::date
   END) AS calendar_due_date,
   CASE
@@ -68,7 +68,7 @@ SELECT
         ELSE FALSE
       END
       OR sr.interval_calendar_days IS NOT NULL
-      AND (COALESCE(ls.serviced_at, m.created_at) + make_interval(days => min(sr.interval_calendar_days)))::date <= CURRENT_DATE
+      AND (COALESCE(ls.serviced_at, m.created_at) + make_interval(days => sr.interval_calendar_days))::date <= CURRENT_DATE
     ) THEN 'due'
     WHEN ls.serviced_at IS NULL
       AND (

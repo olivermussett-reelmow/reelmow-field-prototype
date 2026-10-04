@@ -13,3 +13,7 @@ The function deliberately writes only to ingestion.ai_runs and ingestion.extract
 Use Supabase project secrets for production values; never commit a .env containing these values. See Supabase Edge Function secret guidance.
 
 The production deployment should be wired to a CI/CD environment once the Supabase project reference and deployment token are configured.
+
+## discover-grounds-machines
+
+Authenticated, on-demand product matching for the Add Machine flow. It searches the exact manufacturer/model query using OpenAI Responses web search, returns up to five ranked matches (exact model, close model, related option) with a short match explanation, and includes links only to pages cited by the web-search response. For supported manufacturer domains, it reads the page's own Open Graph/Twitter image metadata and returns the image URL with its source page; it never asks the model to invent a photo. The Garage labels this as a manufacturer reference image, and a user's own uploaded machine photo takes display priority. It does not create or update canonical catalogue records; a user must confirm a verified catalogue entry before adding a machine. `OPENAI_API_KEY` must be configured as a Supabase Edge Function secret. The function validates the supplied user's session itself; the gateway JWT check is disabled for this function in `supabase/config.toml` so that current Supabase Auth token formats are handled by Auth's `getUser()` verification.

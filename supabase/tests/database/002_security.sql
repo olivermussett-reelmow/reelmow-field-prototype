@@ -1,5 +1,5 @@
 begin;
-select extensions.plan(15);
+select extensions.plan(17);
 select extensions.ok((select count(*)=3 from pg_proc where pronamespace='garage'::regnamespace and proname in ('create_organization','record_machine_hours','record_machine_service') and prosecdef),'customer Garage RPC wrappers use SECURITY DEFINER');
 select extensions.ok((select count(*)=3 from pg_proc where pronamespace='garage'::regnamespace and proname in ('create_organization','record_machine_hours','record_machine_service') and proconfig @> array['search_path=""']),'Garage RPC wrappers pin search_path');
 select extensions.ok(not exists(select 1 from pg_proc where pronamespace='catalogue'::regnamespace and proname='search_machines' and prosecdef),'catalogue search is SECURITY INVOKER');
@@ -27,9 +27,13 @@ select extensions.ok(
     select 1 from pg_policies
     where schemaname='storage' and tablename='objects'
       and policyname='garage object read'
-      and coalesce(qual,'') like '%objects.name%'
+      and coalesce(qual,'') like '%storage.foldername(name)%'
+      and coalesce(qual,'') like '%reelmow-garage-private%'
+      and coalesce(qual,'') like '%private.is_org_member%'
   ),
-  'garage storage read policy uses qualified object name'
+  'garage storage read policy scopes the object path to organisation members'
 );
+select extensions.ok((select prosecdef and proconfig @> array['search_path=""'] from pg_proc where oid='garage.create_web_discovered_machine(uuid,uuid,text,text,text,text,text,text,jsonb,text,text,text,numeric,numeric,text,text,text)'::regprocedure),'web-discovered machine RPC uses SECURITY DEFINER with a pinned search path');
+select extensions.ok(not has_function_privilege('anon','garage.create_web_discovered_machine(uuid,uuid,text,text,text,text,text,text,jsonb,text,text,text,numeric,numeric,text,text,text)'::regprocedure,'execute'),'anonymous users cannot create web-discovered machines');
 select * from extensions.finish();
 rollback;
