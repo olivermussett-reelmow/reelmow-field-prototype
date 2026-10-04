@@ -27,9 +27,11 @@ select extensions.ok(
     select 1 from pg_policies
     where schemaname='storage' and tablename='objects'
       and policyname='garage object read'
-      and coalesce(qual,'') like '%objects.name%'
+      and coalesce(qual,'') like '%storage.foldername(name)%'
+      and coalesce(qual,'') like '%reelmow-garage-private%'
+      and coalesce(qual,'') like '%private.is_org_member%'
   ),
-  'garage storage read policy uses qualified object name'
+  'garage storage read policy scopes the object path to organisation members'
 );
 select * from extensions.finish();
 rollback;
