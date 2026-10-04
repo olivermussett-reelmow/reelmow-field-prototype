@@ -33,7 +33,7 @@ select extensions.ok(
   ),
   'garage storage read policy scopes the object path to organisation members'
 );
-select extensions.ok((select prosecdef and proconfig @> array['search_path=""'] from pg_proc where oid='garage.create_web_discovered_machine(uuid,uuid,text,text,text,text,text,text,jsonb,text,text,text,numeric,numeric,text)'::regprocedure),'web-discovered machine RPC uses SECURITY DEFINER with a pinned search path');
-select extensions.ok(not has_function_privilege('anon','garage.create_web_discovered_machine(uuid,uuid,text,text,text,text,text,text,jsonb,text,text,text,numeric,numeric,text)'::regprocedure,'execute'),'anonymous users cannot create web-discovered machines');
+select extensions.ok((select prosecdef and proconfig @> array['search_path=""'] from pg_proc where oid='garage.create_web_discovered_machine(uuid,uuid,text,text,text,text,text,text,jsonb,text,text,text,numeric,numeric,text,text,text)'::regprocedure),'web-discovered machine RPC uses SECURITY DEFINER with a pinned search path');
+select extensions.ok(not has_function_privilege('anon','garage.create_web_discovered_machine(uuid,uuid,text,text,text,text,text,text,jsonb,text,text,text,numeric,numeric,text,text,text)'::regprocedure,'execute'),'anonymous users cannot create web-discovered machines');
 select * from extensions.finish();
 rollback;
