@@ -55,9 +55,10 @@ begin
   if p_discovered_match_type is null or p_discovered_match_type not in ('exact_match','close_match','related_option') then
     raise exception 'Invalid web match type';
   end if;
-  if p_discovered_source_urls is null or jsonb_typeof(p_discovered_source_urls) is distinct from 'array'
-     or jsonb_array_length(p_discovered_source_urls)<1
-     or jsonb_array_length(p_discovered_source_urls)>5 then
+  if p_discovered_source_urls is null or jsonb_typeof(p_discovered_source_urls) is distinct from 'array' then
+    raise exception 'At least one source link is required';
+  end if;
+  if jsonb_array_length(p_discovered_source_urls)<1 or jsonb_array_length(p_discovered_source_urls)>5 then
     raise exception 'At least one source link is required';
   end if;
   if exists (
