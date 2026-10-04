@@ -18,6 +18,36 @@ const outputSchema={
 const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{...corsHeaders,"content-type":"application/json"}});
 const normalizeUrl=(value:string)=>{try{const url=new URL(value);return url.protocol+"//"+url.hostname.toLowerCase().replace(/^www\./,"")+url.pathname.replace(/\/+$/,"")}catch{return ""}};
 
+// Read an actual product-page image, rather than asking the model to invent one.
+// Restrict scraping to a cited HTTPS page whose host includes the manufacturer name;
+// reject redirects and off-host image CDNs to keep outbound fetching predictable.
+async function productImage(pageUrl:string,manufacturer:string):Promise<{url:string;source:string}|null>{
+  try{
+    const page=new URL(pageUrl);
+    const brand=manufacturer.toLowerCase().replace(/[^a-z0-9]/g,"");
+    const host=page.hostname.toLowerCase().replace(/^www\./,"");
+    if(page.protocol!=="https:"||!brand||!host.includes(brand)||host==="localhost"||/^\d/.test(host)||host.includes(":"))return null;
+    const response=await fetch(page.href,{redirect:"manual",headers:{"Accept":"text/html","User-Agent":"REELMOW product image preview/1.0"},signal:AbortSignal.timeout(4500)});
+    if(!response.ok||response.status>=300||!response.headers.get("content-type")?.toLowerCase().includes("text/html"))return null;
+    const reader=response.body?.getReader();if(!reader)return null;
+    const chunks:Uint8Array[]=[];let size=0;
+    while(size<900_000){const {done,value}=await reader.read();if(done)break;chunks.push(value);size+=value.length;if(size>900_000){await reader.cancel();return null}}
+    const html=new TextDecoder().decode(concat(chunks));
+    const tags=[...html.matchAll(/<meta\b[^>]*>/gi)].map(x=>x[0]);
+    for(const tag of tags){
+      const key=attr(tag,"property")||attr(tag,"name");
+      if(!["og:image","og:image:secure_url","twitter:image"].includes(key.toLowerCase()))continue;
+      const value=attr(tag,"content");if(!value)continue;
+      const image=new URL(value,page.href);
+      if(image.protocol!=="https:"||!(image.hostname===page.hostname||image.hostname.endsWith("."+page.hostname)))continue;
+      return {url:image.href,source:page.href};
+    }
+  }catch{}
+  return null;
+}
+function attr(tag:string,name:string){const match=tag.match(new RegExp("\\b"+name+"\\s*=\\s*([\\\"'])(.*?)\\1","i"));return (match?.[2]||"").replace(/&amp;/g,"&").trim()}
+function concat(chunks:Uint8Array[]){const out=new Uint8Array(chunks.reduce((n,x)=>n+x.length,0));let at=0;for(const chunk of chunks){out.set(chunk,at);at+=chunk.length}return out}
+
 Deno.serve(async req=>{
   if(req.method==="OPTIONS")return new Response(null,{status:204,headers:corsHeaders});
   if(req.method!=="POST")return json({error:"POST required"},405);
@@ -61,6 +91,10 @@ Deno.serve(async req=>{
       return {...machine,source_urls:[...new Set(cited)].slice(0,5)};
     }).filter((machine:Record<string,unknown>)=>Array.isArray(machine.source_urls)&&machine.source_urls.length>0&&typeof machine.manufacturer==="string"&&typeof machine.model==="string"&&typeof machine.match_reason==="string")
       .sort((a:Record<string,unknown>,b:Record<string,unknown>)=>(matchRank[String(a.match_type)]??3)-(matchRank[String(b.match_type)]??3));
+    await Promise.all(machines.map(async(machine:Record<string,unknown>)=>{
+      const page=(machine.source_urls as string[]).find(value=>{try{return new URL(value).hostname.toLowerCase().replace(/^www\./,"").includes(String(machine.manufacturer).toLowerCase().replace(/[^a-z0-9]/g,""))}catch{return false}});
+      if(page){const image=await productImage(page,String(machine.manufacturer));if(image){machine.image_url=image.url;machine.image_source_url=image.source}}
+    }));
     return json({machines,sources:[...sources.values()].slice(0,16),caveat:typeof parsed.caveat==="string"?parsed.caveat:"Public sources do not provide a complete UK market-share ranking."});
   }catch(error){
     console.error("Grounds web research failed",error?.message||error);
